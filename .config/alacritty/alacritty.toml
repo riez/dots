@@ -1,0 +1,111 @@
+
+[font.normal]
+family = "FiraCode Nerd Font"
+
+[font.bold]
+family = "OperatorMonoSSm Nerd Font"
+style = "Book"
+
+[font.italic]
+family = "OperatorMonoSSm Nerd Font"
+style = "Book Italic"
+
+[font.offset]
+x = 0
+y = 0
+
+[[keyboard.bindings]]
+key = "K"
+mods = "Control|Shift"
+chars = "\u0003"
+
+[[keyboard.bindings]]
+chars = "\u0002p"
+key = "LBracket"
+mods = "Alt|Shift"
+
+[[keyboard.bindings]]
+chars = "\u0002n"
+key = "RBracket"
+mods = "Alt|Shift"
+
+[[keyboard.bindings]]
+chars = "\u0002;"
+key = "LBracket"
+mods = "Alt"
+
+[[keyboard.bindings]]
+chars = "\u0002o"
+key = "RBracket"
+mods = "Alt"
+
+[[keyboard.bindings]]
+chars = "\u0002&"
+key = "W"
+mods = "Alt"
+
+[[keyboard.bindings]]
+chars = "\u0002c"
+key = "T"
+mods = "Alt"
+
+[[keyboard.bindings]]
+chars = "\u0002%\u0002"
+key = "L"
+mods = "Alt|Shift"
+
+[[keyboard.bindings]]
+chars = "\u0002x"
+key = "W"
+mods = "Alt|Shift"
+
+[[keyboard.bindings]]
+chars = "\u0002%"
+key = "H"
+mods = "Alt|Shift"
+
+[[keyboard.bindings]]
+action = "ToggleFullscreen"
+key = 36
+mods = "Alt"
+
+[[keyboard.bindings]]
+key = "V"
+mods = "Control"
+action = "Paste"
+
+[[keyboard.bindings]]
+key = "C"
+mods = "Control"
+action = "Copy"
+
+[[keyboard.bindings]]
+action = "ClearSelection"
+key = "C"
+mode = "Vi|~Search"
+mods = "Control|Shift"
+
+[[keyboard.bindings]]
+action = "ResetFontSize"
+key = "Key0"
+mods = "Control"
+
+[[keyboard.bindings]]
+action = "IncreaseFontSize"
+key = "Equals"
+mods = "Control"
+
+[[keyboard.bindings]]
+action = "PasteSelection"
+key = "Insert"
+mods = "Shift"
+
+[window]
+opacity = 0.93
+
+[window.padding]
+x = 3
+y = 1
+
+[env]
+TERM = "xterm-256color-italic"

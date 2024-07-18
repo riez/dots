@@ -1,0 +1,9 @@
+*
+!.zshrc
+!.aws/
+!.config/
+!setup.sh
+!opts/
+!.gitignore
+.kube/
+.ssh/

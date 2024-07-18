@@ -5,5 +5,3 @@
 !setup.sh
 !opts/
 !.gitignore
-.kube/
-.ssh/

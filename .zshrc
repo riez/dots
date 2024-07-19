@@ -48,7 +48,12 @@ source $ZSH/oh-my-zsh.sh
 # # Example aliases
 # # alias zshconfig="mate ~/.zshrc"
 # # alias ohmyzsh="mate ~/.oh-my-zsh"
-#
+# # linuxbrew
+# # # TODO: add logic to check if linux or mac
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+
+
 # # Custom Alias
 alias vi="nvim"
 alias tmux="tmux -CC"
@@ -63,7 +68,7 @@ source ~/.config/zsh/antigen.zsh
 # antigen theme romkatv/powerlevel10k
 antigen bundle git
 antigen bundle aws
-# antigen bundle zsh-users/zsh-autosuggestions
+antigen bundle zsh-users/zsh-autosuggestions
 antigen bundle zsh-users/zsh-syntax-highlighting
 antigen bundle dgnest/zsh-gvm-plugin
 antigen bundle agkozak/zsh-z
@@ -81,7 +86,7 @@ antigen apply
 plugins=($plugins aws git tmux)
 
 # # GVM
-[[ -s "/Users/riez/.gvm/scripts/gvm" ]] && source "/Users/riez/.gvm/scripts/gvm"
+[[ -s "$HOME/.gvm/scripts/gvm" ]] && source "$HOME/.gvm/scripts/gvm"
 # # FNM
 eval "$(fnm env --use-on-cd)"
 
@@ -119,7 +124,7 @@ done
 export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
-eval "$(/opt/homebrew/bin/rbenv init - zsh)"
+eval "$(/usr/bin/rbenv init - zsh)"
 
 autoload -U +X bashcompinit && bashcompinit
 complete -o nospace -C /opt/homebrew/bin/terraform terraform
@@ -149,7 +154,9 @@ esac
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
 #
 # ##These plugins should be sourced at the end of the file and in this order, as per https://github.com/softmoth/zsh-vim-mode and https://github.com/zsh-users/zsh-syntax-highlighting
-source $HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
-source $HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+# source $HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+# source $HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
 ZSH_TMUX_ITERM2=false
+
+[[ -s "/home/famtqn/.gvm/scripts/gvm" ]] && source "/home/famtqn/.gvm/scripts/gvm"

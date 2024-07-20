@@ -56,7 +56,7 @@ export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
 
 # # Custom Alias
 alias vi="nvim"
-alias tmux="tmux -CC"
+# alias tmux="tmux -CC"
 alias aws='docker run --rm -ti -v ~/.aws:/root/.aws -v $(pwd):/aws amazon/aws-cli'
 alias swagger='docker run --rm -it  --user $(id -u):$(id -g) -v $HOME:$HOME -w $PWD ghcr.io/go-swagger/go-swagger'
 swagger version

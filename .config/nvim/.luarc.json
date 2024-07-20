@@ -64,6 +64,7 @@
         "/Users/riez/.config/nvim/lua",
         "/Users/riez/.local/share/nvim/lazy/neoconf.nvim/types",
         "/Users/riez/.local/share/nvim/lazy/neoconf.nvim/types/lua",
-        "${3rd}/luv/library"
+        "${3rd}/luv/library",
+        "${3rd}/luassert/library"
     ]
 }

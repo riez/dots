@@ -48,10 +48,17 @@ source $ZSH/oh-my-zsh.sh
 # # Example aliases
 # # alias zshconfig="mate ~/.zshrc"
 # # alias ohmyzsh="mate ~/.oh-my-zsh"
-# # linuxbrew
-# # # TODO: add logic to check if linux or mac
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+
+## Homebrew 
+if [[ "$(uname)" == "Linux" ]]; then
+    # Linux-specific configuration
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+elif [[ "$(uname)" == "Darwin" ]]; then
+    # macOS-specific configuration
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+    export PATH="/opt/homebrew/bin:$PATH"
+fi
 
 
 # # Custom Alias
@@ -124,7 +131,7 @@ done
 export PYENV_ROOT="$HOME/.pyenv"
 command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
-eval "$(/usr/bin/rbenv init - zsh)"
+eval "$(rbenv init - zsh)"
 
 autoload -U +X bashcompinit && bashcompinit
 complete -o nospace -C /opt/homebrew/bin/terraform terraform

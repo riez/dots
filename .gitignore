@@ -5,3 +5,4 @@
 !setup.sh
 !opts/
 !.gitignore
+!neovim-as-merge-tool.md

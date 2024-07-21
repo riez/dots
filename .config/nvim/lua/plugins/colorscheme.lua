@@ -36,10 +36,11 @@ return {
   {
     "LazyVim/LazyVim",
     config = function()
+      vim.cmd("colorscheme koehler")
       vim.cmd("hi Normal guibg=NONE ctermbg=NONE")
     end,
-    opts = {
-      colorscheme = "koehler",
-    },
+    -- opts = {
+    --   colorscheme = "koehler",
+    -- },
   },
 }

@@ -35,8 +35,11 @@ return {
   -- Configure LazyVim to load gruvbox
   {
     "LazyVim/LazyVim",
+    config = function()
+      vim.cmd("hi Normal guibg=NONE ctermbg=NONE")
+    end,
     opts = {
-      colorscheme = "tokyonight-night",
+      colorscheme = "koehler",
     },
   },
 }

@@ -1,3 +1,11 @@
-!*
+*
 *.DS_Store
+!alacritty
+!k9s
+!karabiner
+!kitty
+!nvim.bak
+!nvim
+!zsh
+!.gitignore
 

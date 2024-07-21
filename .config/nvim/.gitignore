@@ -1,3 +1,4 @@
+!*
 tt.*
 .tests
 doc/tags
@@ -6,3 +7,4 @@ debug
 foo.*
 *.log
 data
+!.gitignore

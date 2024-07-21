@@ -2,6 +2,7 @@
 return {
   {
     "ellisonleao/gruvbox.nvim",
+    lazy = true,
     config = function()
       -- Optionally configure and load the colorscheme
       -- directly inside the plugin declaration.
@@ -11,15 +12,23 @@ return {
       vim.g.gruvbox_material_background = "hard"
       vim.g.gruvbox_material_enable_bold = true
       vim.g.gruvbox_material_transparent_background = 0
-      vim.cmd("set background=light")
+      -- vim.cmd("set background=light")
     end,
+  },
+  {
+    "tokyonight.nvim",
+    opts = {
+      transparent = true,
+      styles = {
+        sidebars = "transparent",
+        floats = "transparent",
+      },
+    },
   },
   { "rebelot/kanagawa.nvim", opts = {
     transparent = true,
   } },
-  { "projekt0n/github-nvim-theme", options = {
-    transparent = true,
-  } },
+  { "projekt0n/github-nvim-theme" },
   { "sainnhe/gruvbox-material" },
   { "sainnhe/everforest" },
 
@@ -27,7 +36,7 @@ return {
   {
     "LazyVim/LazyVim",
     opts = {
-      colorscheme = "gruvbox-material",
+      colorscheme = "tokyonight-night",
     },
   },
 }

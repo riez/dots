@@ -6,8 +6,8 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/too
 # Check if using yum or apt
 PKG_MAN=$(command -v yum || command -v apt) || echo "Neither yum nor apt found"
 
-PKG_MAN install build-essential curl file git tmux -y
-PKG_MAN openssl -y
+$PKG_MAN install build-essential curl file git tmux -y
+$PKG_MAN openssl -y
 
 # procps on Fedora, Centos, Arch Linux or Redhat is procps-ng
 PKG_MAN install procps -y
@@ -18,7 +18,7 @@ PKG_MAN install procps -y
 brew install neovim
 
 # Install Antigen ZSH
-curl -L git.io/antigen > $HOME/.opts/antigen.zsh
+curl -L git.io/antigen >$HOME/.opts/antigen.zsh
 
 # Kubernetes Related
 brew install minikube
@@ -32,7 +32,7 @@ brew install fnm
 brew install oven-sh/bun/bun
 
 # Golang Related
-PKG_MAN install bison
+$PKG_MAN install bison
 brew install go
 ## Install GVM
 zsh < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer)

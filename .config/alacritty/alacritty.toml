@@ -1,6 +1,9 @@
 [shell]
 program = "/usr/bin/zsh"
 
+[window]
+opacity = 0.9
+
 [font.normal]
 family = "FiraCode Nerd Font"
 
@@ -21,54 +24,80 @@ key = "K"
 mods = "Control|Shift"
 chars = "\u0003"
 
+# Key bindings for tmux window navigation
 [[keyboard.bindings]]
-chars = "\u0002p"
-key = "LBracket"
-mods = "Alt|Shift"
-
-[[keyboard.bindings]]
-chars = "\u0002n"
-key = "RBracket"
-mods = "Alt|Shift"
-
-[[keyboard.bindings]]
-chars = "\u0002;"
-key = "LBracket"
-mods = "Alt"
-
-[[keyboard.bindings]]
-chars = "\u0002o"
-key = "RBracket"
-mods = "Alt"
-
-[[keyboard.bindings]]
-chars = "\u0002&"
-key = "W"
-mods = "Alt"
-
-[[keyboard.bindings]]
-chars = "\u0002c"
 key = "T"
 mods = "Alt"
 
-[[keyboard.bindings]]
-chars = "\u0002%\u0002"
-key = "L"
-mods = "Alt|Shift"
+[keyboard.bindings.command]
+args = ["new-window", "-c", "~"]
+program = "tmux"
 
 [[keyboard.bindings]]
-chars = "\u0002x"
 key = "W"
 mods = "Alt|Shift"
 
+[keyboard.bindings.command]
+args = ["kill-window"]
+program = "tmux"
+
+
 [[keyboard.bindings]]
-chars = "\u0002%"
-key = "H"
+chars = "\u0002x" # Send Ctrl-b + x
+key = "W"
+mods = "Alt"
+
+[[keyboard.bindings]]
+key = "{"
 mods = "Alt|Shift"
+
+[keyboard.bindings.command]
+args = ["select-window", "-t", "-1"]
+program = "tmux"
+
+[[keyboard.bindings]]
+key = "}"
+mods = "Alt|Shift"
+
+[keyboard.bindings.command]
+args = ["select-window", "-t", "+1"]
+program = "tmux"
+
+[[keyboard.bindings]]
+key = "LBracket"
+mods = "Alt|Super"
+
+[keyboard.bindings.command]
+args = ["swap-window", "-t", "-1", ";", "select-window", "-t", "-1"]
+program = "tmux"
+
+[[keyboard.bindings]]
+key = "RBracket"
+mods = "Alt|Super"
+
+[keyboard.bindings.command]
+args = ["swap-window", "-t", "+1", ";", "select-window", "-t", "+1"]
+program = "tmux"
+
+[[keyboard.bindings]]
+key = "L"
+mods = "Alt|Shift"
+
+[keyboard.bindings.command]
+args = ["split-window", "-h"]
+program = "tmux"
+
+[[keyboard.bindings]]
+key = "J"
+mods = "Alt|Shift"
+
+[keyboard.bindings.command]
+args = ["split-window", "-v"]
+program = "tmux"
 
 [[keyboard.bindings]]
 action = "ToggleFullscreen"
-key = 36
+key = "Enter"
 mods = "Alt"
 
 [[keyboard.bindings]]
@@ -101,9 +130,6 @@ mods = "Control"
 action = "PasteSelection"
 key = "Insert"
 mods = "Shift"
-
-[window]
-opacity = 0.9
 
 [window.padding]
 x = 3

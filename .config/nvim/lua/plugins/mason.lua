@@ -27,11 +27,11 @@ return {
     },
     opts = {
       servers = {
-        luals = {
+        lua_ls = {
         },
       },
       setup = {
-        luals = function()
+        lua_ls = function()
           require("lazyvim.util").lsp.on_attach(function(client, buffnr)
             require('lsp-format').on_attach(client, buffnr)
           end)

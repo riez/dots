@@ -170,3 +170,10 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
 ZSH_TMUX_ITERM2=false
 
 [[ -s "/home/famtqn/.gvm/scripts/gvm" ]] && source "/home/famtqn/.gvm/scripts/gvm"
+
+# bun completions
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"

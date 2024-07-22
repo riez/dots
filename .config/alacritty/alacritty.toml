@@ -102,7 +102,7 @@ key = "T"
 mods = "Command"
 
 [[keyboard.bindings]]
-chars = "\u0002x" # Send Ctrl-b + x
+chars = "\u0002x"      # Send Ctrl-b + x
 key = "W"
 mods = "Command|Shift"
 
@@ -112,34 +112,35 @@ key = "W"
 mods = "Command"
 
 [[keyboard.bindings]]
-chars = "\u0002p" # Send Ctrl-b + p
+chars = "\u0002p"      # Send Ctrl-b + p
 key = "{"
 mods = "Command|Shift"
 
 [[keyboard.bindings]]
-chars = "\u0002n" # Send Ctrl-b + n
+chars = "\u0002n"      # Send Ctrl-b + n
 key = "}"
 mods = "Command|Shift"
 
 [[keyboard.bindings]]
-chars = "\u0002%"# Send Ctrl-b + %
+chars = "\u0002%"      # Send Ctrl-b + %
 key = "L"
 mods = "Command|Shift"
 
 [[keyboard.bindings]]
-chars = "\u0002\""# Send Ctrl-b + "
+chars = "\u0002\""     # Send Ctrl-b + "
 key = "J"
 mods = "Command|Shift"
 
-# [[keyboard.bindings]]
-# chars = "\u0002{" # Send Ctrl-b {
-# key = "["
-# mods = "Command|Control"
-#
-# [[keyboard.bindings]]
-# chars = "\u0002}" # Send Ctrl-b }
-# key = "]"
-# mods = "Command|Control"
+# Swap position window
+[[keyboard.bindings]]
+chars = "\u0002["        # Send Ctrl-b [
+key = "["
+mods = "Command|Control"
+
+[[keyboard.bindings]]
+chars = "\u0002]"        # Send Ctrl-b ]
+key = "]"
+mods = "Command|Control"
 
 [[keyboard.bindings]]
 action = "ToggleFullscreen"

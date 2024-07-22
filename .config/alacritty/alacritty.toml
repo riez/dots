@@ -39,7 +39,7 @@ key = "W"
 mods = "Alt|Shift"
 
 [keyboard.bindings.command]
-args = ["kill-window"]
+args = ["kill-pane"]
 program = "tmux"
 
 [[keyboard.bindings]]

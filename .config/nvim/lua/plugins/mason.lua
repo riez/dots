@@ -16,6 +16,19 @@ return {
         "black",
         "pyright",
         "debugpy",
+        -- Go Related,
+        "golangci-lint",
+        "goimports",
+        "goimports-reviser",
+        -- Others
+        "actionlint",
+        "circleci-yaml-language-server",
+        "gitlab-ci-ls",
+        "docker-compose-language-service",
+        "yaml-language-server",
+        "yamllint",
+        "yamlfmt",
+        "yq",
       },
     },
   },
@@ -29,9 +42,15 @@ return {
       servers = {
         lua_ls = {
         },
+        yamlls = {}
       },
       setup = {
         lua_ls = function()
+          require("lazyvim.util").lsp.on_attach(function(client, buffnr)
+            require('lsp-format').on_attach(client, buffnr)
+          end)
+        end,
+        yamlls = function()
           require("lazyvim.util").lsp.on_attach(function(client, buffnr)
             require('lsp-format').on_attach(client, buffnr)
           end)

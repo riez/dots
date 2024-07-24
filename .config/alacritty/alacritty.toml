@@ -133,12 +133,12 @@ mods = "Command|Shift"
 
 # Swap position window
 [[keyboard.bindings]]
-chars = "\u0002["        # Send Ctrl-b [
+chars = "\u0002{"        # Send Ctrl-b {
 key = "["
 mods = "Command|Control"
 
 [[keyboard.bindings]]
-chars = "\u0002]"        # Send Ctrl-b ]
+chars = "\u0002}"        # Send Ctrl-b }
 key = "]"
 mods = "Command|Control"
 

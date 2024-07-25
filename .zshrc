@@ -68,7 +68,7 @@ fi
 # # Custom Alias
 alias vi="nvim"
 alias aws='docker run --rm -ti -v ~/.aws:/root/.aws -v $(pwd):/aws amazon/aws-cli'
-alias swagger='docker run --rm -it  --user $(id -u):$(id -g) -v $HOME:$HOME -w $PWD ghcr.io/go-swagger/go-swagger'
+alias swagger='docker run --rm -it --pull=missing --user $(id -u):$(id -g) -v $HOME:$HOME -w $PWD ghcr.io/go-swagger/go-swagger'
 swagger version
 #
 # # Custom Plugin
@@ -177,3 +177,10 @@ ZSH_TMUX_ITERM2=false
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
+
+# bit
+case ":$PATH:" in
+  *":$HOME/bin:"*) ;;
+  *) export PATH="$PATH:$HOME/bin" ;;
+esac
+# bit end

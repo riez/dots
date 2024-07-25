@@ -67,7 +67,7 @@ fi
 
 # # Custom Alias
 alias vi="nvim"
-alias aws='docker run --rm -ti -v ~/.aws:/root/.aws -v $(pwd):/aws amazon/aws-cli'
+alias aws='docker run --rm -ti --pull=missing -v ~/.aws:/root/.aws -v $(pwd):/aws amazon/aws-cli'
 alias swagger='docker run --rm -it --pull=missing --user $(id -u):$(id -g) -v $HOME:$HOME -w $PWD ghcr.io/go-swagger/go-swagger'
 swagger version
 #

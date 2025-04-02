@@ -1,5 +1,6 @@
 [shell]
-program = "/usr/bin/zsh"
+program = "/bin/zsh"
+args = ["-l"]
 
 [window]
 opacity = 0.9
@@ -19,6 +20,11 @@ style = "Book Italic"
 [font.offset]
 x = 0
 y = 0
+
+[[keyboard.bindings]]
+key = "N"
+mods = "Command|Shift"
+action = "CreateNewWindow"
 
 [[keyboard.bindings]]
 key = "K"

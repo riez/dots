@@ -25,9 +25,12 @@ return {
       },
     },
   },
-  { "rebelot/kanagawa.nvim", opts = {
-    transparent = true,
-  } },
+  {
+    "rebelot/kanagawa.nvim",
+    opts = {
+      transparent = true,
+    }
+  },
   { "projekt0n/github-nvim-theme" },
   { "sainnhe/gruvbox-material" },
   { "sainnhe/everforest" },
@@ -36,7 +39,7 @@ return {
   {
     "LazyVim/LazyVim",
     config = function()
-      vim.cmd("colorscheme koehler")
+      vim.cmd("colorscheme kanagawa")
       vim.cmd("hi Normal guibg=NONE ctermbg=NONE")
     end,
     -- opts = {

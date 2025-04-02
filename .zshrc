@@ -9,7 +9,7 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 source $ZSH/oh-my-zsh.sh
 
 # Path Configuration
-export PATH=$HOME/bin:/usr/local/bin:/usr/local/sbin:~/bin:$PATH
+export PATH="$HOME/bin:/usr/local/bin:/usr/local/sbin:~/bin:$PATH"
 
 # System Detection
 IS_LINUX=false
@@ -26,16 +26,16 @@ elif [[ "$(uname)" == "Darwin" ]]; then
 fi
 
 # Antigen Plugin Manager
-if [[ -f ~/.config/zsh/antigen.zsh ]]; then
-    source ~/.config/zsh/antigen.zsh
+if [[ -f "$HOME/.config/zsh/antigen.zsh" ]]; then
+    source "$HOME/.config/zsh/antigen.zsh"
 
     antigen theme romkatv/powerlevel10k
     antigen bundles <<EOBUNDLES
         git
         aws
-        $(command -v tmux &> /dev/null && echo "tmux")
-        $(command -v docker &> /dev/null && echo "docker")
-        $(command -v docker-compose &> /dev/null && echo "docker-compose")
+        tmux
+        docker
+        docker-compose
         zsh-users/zsh-autosuggestions
         zsh-users/zsh-syntax-highlighting
         dgnest/zsh-gvm-plugin
@@ -54,7 +54,7 @@ fi
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
 
 # WSL-specific settings
-if [[ $IS_WSL == true ]]; then
+if [[ "$IS_WSL" == true ]]; then
     ZSH_TMUX_ITERM2=false
     alias tmux="tmux -CC"
     # Add any other WSL-specific configurations here
@@ -97,10 +97,10 @@ fi
 # Package Managers
 ## Homebrew
 if command -v brew &> /dev/null; then
-    if [[ $IS_LINUX == true ]]; then
+    if [[ "$IS_LINUX" == true ]]; then
         eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
         export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
-    elif [[ $IS_MAC == true ]]; then
+    elif [[ "$IS_MAC" == true ]]; then
         eval "$(/opt/homebrew/bin/brew shellenv)"
         export PATH="/opt/homebrew/bin:$PATH"
     fi
@@ -132,9 +132,9 @@ export PATH="$PATH:$HOME/.local/bin"
 
 # Development Tools
 ## Android
-if [[ $IS_MAC == true ]]; then
+if [[ "$IS_MAC" == true ]]; then
     export ANDROID_HOME=~/Library/Android/sdk
-elif [[ $IS_LINUX == true ]]; then
+elif [[ "$IS_LINUX" == true ]]; then
     export ANDROID_HOME=$HOME/Android/Sdk
 fi
 
@@ -144,7 +144,7 @@ if [[ -d "$ANDROID_HOME" ]]; then
 fi
 
 ## Java
-if [[ $IS_MAC == true ]]; then
+if [[ "$IS_MAC" == true ]]; then
     export PATH=$PATH:"/opt/homebrew/opt/openjdk/bin"
     export CPPFLAGS="-I/opt/homebrew/opt/openjdk/include"
 fi
@@ -157,15 +157,14 @@ fi
 
 ## Kubernetes
 export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"
-for kconfig in $HOME/.kube/config $(find $HOME/.kube/ -iname "*.k8s.config" 2>/dev/null)
-do
+for kconfig in $HOME/.kube/config $(find $HOME/.kube/ -iname "*.k8s.config" 2>/dev/null); do
     if [ -f "$kconfig" ]; then
         export KUBECONFIG=$KUBECONFIG:$kconfig
     fi
 done
 
 ## Terraform
-if [[ $IS_MAC == true ]]; then
+if [[ "$IS_MAC" == true ]]; then
     autoload -U +X bashcompinit && bashcompinit
     complete -o nospace -C /opt/homebrew/bin/terraform terraform
     export PATH="/usr/local/opt/libpq/bin:$PATH"

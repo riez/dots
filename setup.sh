@@ -28,24 +28,28 @@ MISSING_DEPS=false
 # Check for sudo
 if ! command -v sudo &> /dev/null; then
     print_error "sudo is required but not installed"
+    print_warning "Install with: apt update && apt install -y sudo"
     MISSING_DEPS=true
 fi
 
 # Check for curl
 if ! command -v curl &> /dev/null; then
     print_error "curl is required but not installed"
+    print_warning "Install with: sudo apt update && sudo apt install -y curl"
     MISSING_DEPS=true
 fi
 
 # Check for git
 if ! command -v git &> /dev/null; then
     print_error "git is required but not installed"
+    print_warning "Install with: sudo apt update && sudo apt install -y git"
     MISSING_DEPS=true
 fi
 
 # Check for zsh
 if ! command -v zsh &> /dev/null; then
     print_error "zsh is required but not installed"
+    print_warning "Install with: sudo apt update && sudo apt install -y zsh"
     MISSING_DEPS=true
 fi
 
@@ -53,7 +57,7 @@ fi
 if [[ "$(uname)" == "Linux" && -f /proc/version && $(grep -i microsoft /proc/version) ]]; then
     if ! command -v wslvar &> /dev/null || ! command -v wslpath &> /dev/null; then
         print_error "WSL integration tools (wslu) are required but not installed"
-        print_warning "Install with: sudo apt install -y wslu"
+        print_warning "Install with: sudo apt update && sudo apt install -y wslu"
         MISSING_DEPS=true
     fi
 fi
@@ -127,10 +131,131 @@ git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$
 # Install core tools with Homebrew
 print_status "Installing core tools..."
 brew install \
-    neovim \
     tmux \
     mise \
     git
+
+# Install Neovim with multiple fallback methods
+print_status "Installing Neovim..."
+NEOVIM_INSTALLED=false
+
+# Method 1: Try with Homebrew
+if ! $NEOVIM_INSTALLED; then
+    print_status "Attempting to install Neovim with Homebrew..."
+    brew install neovim
+    if command -v nvim &> /dev/null; then
+        NEOVIM_INSTALLED=true
+        print_status "Neovim installed successfully with Homebrew!"
+    fi
+fi
+
+# Method 2: Try with system package manager
+if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
+    print_status "Attempting to install Neovim with system package manager..."
+    
+    # For Ubuntu/Debian systems
+    if command -v apt &> /dev/null; then
+        print_status "Using apt to install Neovim..."
+        sudo apt update
+        sudo apt install -y neovim
+    # For RHEL/CentOS systems
+    elif command -v yum &> /dev/null; then
+        print_status "Using yum to install Neovim..."
+        sudo yum install -y neovim
+    fi
+    
+    if command -v nvim &> /dev/null; then
+        NEOVIM_INSTALLED=true
+        print_status "Neovim installed successfully with system package manager!"
+    fi
+fi
+
+# Method 3: Try with snap (for Ubuntu)
+if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]] && command -v snap &> /dev/null; then
+    print_status "Attempting to install Neovim with snap..."
+    sudo snap install --classic nvim
+    
+    if command -v nvim &> /dev/null; then
+        NEOVIM_INSTALLED=true
+        print_status "Neovim installed successfully with snap!"
+    fi
+fi
+
+# Method 4: Install from AppImage (Linux only)
+if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
+    print_status "Attempting to install Neovim using AppImage..."
+    mkdir -p "$HOME/bin"
+    cd "$HOME/bin"
+    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+    chmod u+x nvim.appimage
+    
+    # Try to extract AppImage if fuse is not available
+    if ! ./nvim.appimage --version &> /dev/null; then
+        print_status "Extracting AppImage (fuse may not be available)..."
+        ./nvim.appimage --appimage-extract
+        # Create wrapper script
+        echo '#!/bin/bash' > nvim
+        echo "$(pwd)/squashfs-root/usr/bin/nvim \"\$@\"" >> nvim
+        chmod +x nvim
+    else
+        # Create symlink
+        ln -sf "$(pwd)/nvim.appimage" "$(pwd)/nvim"
+    fi
+    
+    # Add to PATH if not already there
+    if ! grep -q "$HOME/bin" "$HOME/.zprofile"; then
+        echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.zprofile"
+    fi
+    
+    # Source immediately for the current session
+    export PATH="$HOME/bin:$PATH"
+    
+    if command -v nvim &> /dev/null || [ -f "$HOME/bin/nvim" ]; then
+        NEOVIM_INSTALLED=true
+        print_status "Neovim installed successfully using AppImage!"
+    fi
+fi
+
+# Method 5: Install from source as a last resort
+if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
+    print_status "Attempting to install Neovim from source (this may take a while)..."
+    
+    # Install build dependencies
+    if command -v apt &> /dev/null; then
+        sudo apt update
+        sudo apt install -y ninja-build gettext libtool libtool-bin autoconf automake cmake g++ pkg-config unzip curl
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y ninja-build libtool autoconf automake cmake gcc gcc-c++ make pkgconfig unzip patch gettext curl
+    fi
+    
+    # Clone and build neovim
+    cd /tmp
+    rm -rf neovim
+    git clone https://github.com/neovim/neovim
+    cd neovim
+    git checkout stable
+    make CMAKE_BUILD_TYPE=RelWithDebInfo
+    sudo make install
+    
+    if command -v nvim &> /dev/null; then
+        NEOVIM_INSTALLED=true
+        print_status "Neovim installed successfully from source!"
+    fi
+fi
+
+# Verify Neovim installation and display version
+if command -v nvim &> /dev/null; then
+    NVIM_VERSION=$(nvim --version | head -n 1)
+    print_status "Neovim is installed: $NVIM_VERSION"
+    
+    # Create Neovim configuration directory
+    print_status "Setting up Neovim configuration directory..."
+    mkdir -p "$HOME/.config/nvim"
+else
+    print_error "Failed to install Neovim through multiple methods."
+    print_warning "Please install Neovim manually after the script completes."
+    print_warning "You can visit https://github.com/neovim/neovim/wiki/Installing-Neovim for installation instructions."
+fi
 
 # Set up mise as the unified version manager
 print_status "Setting up mise as the unified runtime version manager..."
@@ -138,15 +263,9 @@ if command -v mise &> /dev/null; then
     # Configure mise in shell
     echo 'eval "$(mise activate zsh)"' >> "$HOME/.zprofile"
     
-    # Install mise plugins
-    mise plugins add nodejs
-    mise plugins add python
-    mise plugins add go
-    mise plugins add rust
-    mise plugins add java
-    mise plugins add ruby
-    
-    # Create mise config directory
+    # Create mise config directory with proper permissions
+    mkdir -p "$HOME/.config" || sudo mkdir -p "$HOME/.config"
+    sudo chown -R $(whoami):$(whoami) "$HOME/.config"
     mkdir -p "$HOME/.config/mise"
     
     # Create base config file if it doesn't exist
@@ -158,35 +277,55 @@ jobs = 4
 legacy_version_file = true
 
 [tools]
-node = ['lts', '18', '20']
-python = ['latest']
-go = ['latest']
+# Node.js versions
+node = ['lts']
+
+# Python versions
+python = ['3.12']
+
+# Go versions - use the specific version that's being requested
+go = ['1.24.2']
+
+# Rust versions
 rust = ['stable']
 EOF
+    else
+        # If config already exists, update Go version in it
+        print_status "Updating Go version in mise config..."
+        sed -i 's/go = \[.*\]/go = \["1.24.2"\]/' "$HOME/.config/mise/config.toml"
     fi
-fi
-
-# Install Node.js tools
-print_status "Installing Node.js tools..."
-brew install oven-sh/bun/bun
-
-# Set up Node.js environment for development with mise
-print_status "Setting up Node.js environment with mise..."
-if command -v mise &> /dev/null; then
-    # Activate mise to use installed Node.js
-    eval "$(mise activate bash)"
     
-    # Install global development tools using the current Node.js
-    print_status "Installing global Node.js development tools..."
-    npm install -g npm@latest
-    npm install -g yarn
-    npm install -g pnpm
-    npm install -g typescript
-    npm install -g electron
-    npm install -g electron-packager
-    npm install -g expo-cli
-    npm install -g create-react-app
-    npm install -g create-react-native-app
+    # Install runtimes with mise
+    print_status "Installing Node.js with mise..."
+    mise install node@lts
+    mise use --global node@lts
+    
+    # Explicitly install the specific Go version with mise
+    print_status "Installing Go 1.24.2 with mise..."
+    mise install go@1.24.2
+    mise use --global go@1.24.2
+    
+    # Install global Node.js tools
+    if mise which node &> /dev/null; then
+        eval "$(mise activate bash)"
+        
+        print_status "Installing global Node.js development tools..."
+        if command -v npm &> /dev/null; then
+            npm install -g npm@latest
+            npm install -g yarn
+            npm install -g pnpm
+            npm install -g typescript
+            npm install -g electron
+            npm install -g electron-packager
+            npm install -g expo-cli
+            npm install -g create-react-app
+            npm install -g create-react-native-app
+        else
+            print_error "npm not found after Node.js installation. Skipping global tools."
+        fi
+    else
+        print_error "Node.js installation with mise failed. Skipping global tools."
+    fi
 fi
 
 # Install Python tools
@@ -197,8 +336,47 @@ brew install pipx
 # Install Go tools
 print_status "Installing Go tools..."
 brew install go
+
+# Install required packages for SDKMAN
+print_status "Installing required packages for SDKMAN..."
+if [[ "$(uname)" == "Linux" ]]; then
+    sudo apt update
+    sudo apt install -y zip unzip
+elif [[ "$(uname)" == "Darwin" ]]; then
+    brew install zip unzip
+fi
+
+# Install SDKMAN if not installed
+if [ ! -d "$HOME/.sdkman" ]; then
+    print_status "Installing SDKMAN..."
+    curl -s "https://get.sdkman.io" | bash
+fi
+
+# Install gvm for managing Go versions
+print_status "Installing gvm for managing multiple Go versions..."
 if [ ! -d "$HOME/.gvm" ]; then
+    # Install gvm dependencies
+    if [[ "$(uname)" == "Linux" ]]; then
+        sudo apt update
+        sudo apt install -y bison
+    elif [[ "$(uname)" == "Darwin" ]]; then
+        brew install bison
+    fi
+    
+    # Install gvm
     bash < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer)
+    
+    # Source gvm
+    [[ -s "$HOME/.gvm/scripts/gvm" ]] && source "$HOME/.gvm/scripts/gvm"
+    
+    # Install latest stable Go version
+    print_status "Installing stable Go version with gvm..."
+    # First install Go 1.4 (bootstrap version)
+    gvm install go1.4 -B
+    gvm use go1.4
+    # Then install latest stable Go
+    gvm install go1.20
+    gvm use go1.20 --default
 fi
 
 # Install Rust
@@ -227,8 +405,9 @@ fi
 print_status "Installing Electron development dependencies..."
 if [[ "$(uname)" == "Linux" ]]; then
     sudo apt update
-    sudo apt install -y libgtk-3-dev libwebkit2gtk-4.0-dev libxss-dev \
-        libgconf-2-4 libnss3-dev libasound2-dev libxtst-dev
+    # Use available packages for Ubuntu Noble (24.04)
+    sudo apt install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxss-dev \
+                       libnss3-dev libasound2-dev libxtst-dev
     
     # Install Wine for Windows builds (optional)
     sudo apt install -y wine64
@@ -240,11 +419,11 @@ fi
 print_status "Installing React Native development dependencies..."
 if [[ "$(uname)" == "Linux" ]]; then
     sudo apt update
-    sudo apt install -y lib32z1 lib32stdc++6 android-tools-adb
+    sudo apt install -y lib32z1 lib32stdc++6 adb
     
     # Install JDK for Android development
     if ! command -v java &> /dev/null; then
-        sudo apt install -y openjdk-11-jdk
+        sudo apt install -y openjdk-17-jdk
     fi
     
     # Setup Android SDK path
@@ -259,7 +438,11 @@ fi
 
 # Install React Native CLI
 print_status "Installing React Native CLI..."
-npm install -g react-native-cli
+if command -v npm &> /dev/null; then
+    npm install -g react-native-cli
+else
+    print_warning "npm not found. Skipping React Native CLI installation."
+fi
 
 # Install Ruby tools
 print_status "Installing Ruby tools..."
@@ -273,17 +456,15 @@ brew install \
     kubectl \
     derailed/k9s/k9s
 
-# Install SDKMAN if not installed
-if [ ! -d "$HOME/.sdkman" ]; then
-    print_status "Installing SDKMAN..."
-    curl -s "https://get.sdkman.io" | bash
-fi
-
 # Install Flutter with OS-specific method
 print_status "Installing Flutter..."
 if [[ "$(uname)" == "Linux" ]]; then
+    # First check and install Flutter dependencies
+    sudo apt update
+    sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
     # For Linux/WSL2, use the recommended approach
-    if [ ! -d "$HOME/flutter" ]; then
+    if [ ! -d "$HOME/development/flutter" ]; then
         print_status "Downloading Flutter SDK for Linux..."
         mkdir -p "$HOME/development"
         cd "$HOME/development"
@@ -291,13 +472,115 @@ if [[ "$(uname)" == "Linux" ]]; then
         tar xf flutter_linux_*.tar.xz
         rm flutter_linux_*.tar.xz
         echo 'export PATH="$PATH:$HOME/development/flutter/bin"' >> "$HOME/.zprofile"
+        
+        # Configure Flutter to use proper display
+        if [[ -f /proc/version && $(grep -i microsoft /proc/version) ]]; then
+            print_status "Configuring Flutter for WSL environment..."
+            cd flutter
+            bin/flutter config --no-analytics
+            bin/flutter config --enable-web
+        fi
+        
         cd "$HOME"
+        print_status "Flutter SDK installed to $HOME/development/flutter"
     else
         print_status "Flutter SDK already installed"
     fi
 elif [[ "$(uname)" == "Darwin" ]]; then
     # For macOS, use Homebrew cask
     brew install --cask flutter
+fi
+
+# Install database development tools (modified for Ubuntu 24.04)
+print_status "Installing database development tools..."
+if [[ "$(uname)" == "Linux" ]]; then
+    sudo apt update
+    
+    # PostgreSQL
+    print_status "Installing PostgreSQL..."
+    sudo apt install -y postgresql postgresql-contrib
+    
+    # MySQL
+    print_status "Installing MySQL..."
+    sudo apt install -y mysql-server
+    
+    # Redis
+    print_status "Installing Redis..."
+    sudo apt install -y redis-server
+    
+    # MongoDB installation for Ubuntu (completely rewritten to fix repository issues)
+    print_status "Setting up MongoDB..."
+    
+    # First, remove any existing MongoDB repository files
+    print_status "Removing any existing MongoDB repository configurations..."
+    sudo rm -f /etc/apt/sources.list.d/mongodb*.list
+    
+    # Also check and remove any references in the main sources.list
+    if grep -q "mongodb" /etc/apt/sources.list; then
+        print_status "Removing MongoDB references from main sources.list..."
+        sudo sed -i '/mongodb/d' /etc/apt/sources.list
+    fi
+    
+    # Update package lists after removing old repositories
+    sudo apt update
+    
+    # Create a fresh temporary directory for MongoDB setup
+    MONGO_TEMP_DIR=$(mktemp -d)
+    cd "$MONGO_TEMP_DIR"
+    
+    # Install MongoDB 6.0 using the jammy repository
+    print_status "Adding MongoDB 6.0 GPG key..."
+    curl -fsSL https://pgp.mongodb.com/server-6.0.asc | \
+        sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg \
+        --dearmor
+    
+    print_status "Adding MongoDB 6.0 repository for jammy..."
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | \
+        sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+    
+    # Ensure package lists are updated from the new repository
+    print_status "Updating package lists with new MongoDB repository..."
+    sudo apt update
+    
+    # Install MongoDB packages
+    print_status "Installing MongoDB 6.0..."
+    sudo apt install -y mongodb-org
+    
+    # Clean up
+    cd "$HOME"
+    rm -rf "$MONGO_TEMP_DIR"
+    
+    # Don't try to start services in WSL as they may not work with systemd
+    if [[ -f /proc/version && ! $(grep -i microsoft /proc/version) ]]; then
+        sudo systemctl enable postgresql
+        sudo systemctl start postgresql
+        sudo systemctl enable mysql
+        sudo systemctl start mysql
+        sudo systemctl enable redis-server
+        sudo systemctl start redis-server
+        sudo systemctl enable mongod
+        sudo systemctl start mongod
+    else
+        print_warning "Running in WSL environment. Database services will need to be started manually:"
+        print_warning "  PostgreSQL: sudo service postgresql start"
+        print_warning "  MySQL: sudo service mysql start"
+        print_warning "  Redis: sudo service redis-server start"
+        print_warning "  MongoDB: sudo service mongod start"
+    fi
+elif [[ "$(uname)" == "Darwin" ]]; then
+    brew install postgresql mysql redis mongodb-community
+    brew services start postgresql
+    brew services start mysql
+    brew services start redis
+    brew services start mongodb-community
+fi
+
+# Install database management tools
+print_status "Installing database management tools..."
+if command -v npm &> /dev/null; then
+    npm install -g prisma
+    npm install -g sequelize-cli
+    npm install -g typeorm
 fi
 
 # Final setup
@@ -378,134 +661,6 @@ EOF
     fi
 fi
 
-# Install database development tools
-print_status "Installing database development tools..."
-if [[ "$(uname)" == "Linux" ]]; then
-    sudo apt update
-    sudo apt install -y postgresql postgresql-contrib mysql-server redis-server
-    sudo service postgresql start
-    sudo service mysql start
-    sudo service redis-server start
-    
-    # Install MongoDB
-    wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
-    echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
-    sudo apt update
-    sudo apt install -y mongodb-org
-    sudo service mongod start
-elif [[ "$(uname)" == "Darwin" ]]; then
-    brew install postgresql mysql redis mongodb-community
-    brew services start postgresql
-    brew services start mysql
-    brew services start redis
-    brew services start mongodb-community
-fi
-
-# Install database management tools
-print_status "Installing database management tools..."
-if command -v npm &> /dev/null; then
-    npm install -g prisma
-    npm install -g sequelize-cli
-    npm install -g typeorm
-fi
-
-# Setup VSCode and Cursor extensions if accessible
-print_status "Setting up code editor extensions if available..."
-
-# Setup VSCode extensions
-if command -v code &> /dev/null; then
-    print_status "Installing recommended VSCode extensions for development..."
-    
-    # Rust extensions
-    code --install-extension rust-lang.rust-analyzer
-    code --install-extension serayuzgur.crates
-    code --install-extension vadimcn.vscode-lldb
-    
-    # JavaScript/TypeScript extensions
-    code --install-extension dbaeumer.vscode-eslint
-    code --install-extension esbenp.prettier-vscode
-    code --install-extension ms-vscode.vscode-typescript-next
-    
-    # React & React Native extensions
-    code --install-extension dsznajder.es7-react-js-snippets
-    code --install-extension msjsdiag.vscode-react-native
-    
-    # Electron extensions
-    code --install-extension dsznajder.es7-react-js-snippets
-    
-    # Flutter/Dart extensions
-    code --install-extension dart-code.dart-code
-    code --install-extension dart-code.flutter
-    
-    # WSL integration
-    if [[ "$(uname)" == "Linux" && -f /proc/version && $(grep -i microsoft /proc/version) ]]; then
-        print_status "Setting up WSL-specific integrations for VSCode..."
-        code --install-extension ms-vscode-remote.remote-wsl
-    fi
-    
-    # General development extensions
-    code --install-extension github.copilot
-    code --install-extension eamodio.gitlens
-    code --install-extension ms-azuretools.vscode-docker
-    code --install-extension christian-kohler.path-intellisense
-    code --install-extension ms-vscode.cmake-tools
-fi
-
-# Setup Cursor IDE if available
-if command -v cursor &> /dev/null; then
-    print_status "Installing recommended Cursor extensions for development..."
-    
-    # Rust extensions
-    cursor --install-extension rust-lang.rust-analyzer
-    cursor --install-extension serayuzgur.crates
-    cursor --install-extension vadimcn.vscode-lldb
-    
-    # JavaScript/TypeScript extensions
-    cursor --install-extension dbaeumer.vscode-eslint
-    cursor --install-extension esbenp.prettier-vscode
-    cursor --install-extension ms-vscode.vscode-typescript-next
-    
-    # React & React Native extensions
-    cursor --install-extension dsznajder.es7-react-js-snippets
-    cursor --install-extension msjsdiag.vscode-react-native
-    
-    # Electron extensions
-    cursor --install-extension dsznajder.es7-react-js-snippets
-    
-    # Flutter/Dart extensions
-    cursor --install-extension dart-code.dart-code
-    cursor --install-extension dart-code.flutter
-    
-    # WSL integration
-    if [[ "$(uname)" == "Linux" && -f /proc/version && $(grep -i microsoft /proc/version) ]]; then
-        print_status "Setting up WSL-specific integrations for Cursor..."
-        cursor --install-extension ms-vscode-remote.remote-wsl
-    fi
-    
-    # General development extensions
-    cursor --install-extension github.copilot
-    cursor --install-extension eamodio.gitlens
-    cursor --install-extension ms-azuretools.vscode-docker
-    cursor --install-extension christian-kohler.path-intellisense
-    cursor --install-extension ms-vscode.cmake-tools
-fi
-
-# Install Cursor if not installed (WSL2 specific)
-if [[ "$(uname)" == "Linux" && -f /proc/version && $(grep -i microsoft /proc/version) ]]; then
-    if ! command -v cursor &> /dev/null; then
-        print_status "Cursor IDE not found. Providing installation instructions..."
-        print_warning "Since you're using WSL2, you should install Cursor on the Windows side:"
-        print_warning "1. Download Cursor from https://cursor.sh/"
-        print_warning "2. Install on Windows"
-        print_warning "3. In WSL, you can run 'cursor' command to launch it if WSL integration is properly set up"
-    fi
-elif [[ "$(uname)" == "Darwin" ]]; then
-    if ! command -v cursor &> /dev/null; then
-        print_status "Installing Cursor IDE for macOS..."
-        brew install --cask cursor
-    fi
-fi
-
 # Verify installation
 print_status "Verifying installation..."
 
@@ -518,6 +673,7 @@ verify_tool() {
         return 0
     else
         print_error "$1 installation failed or not in PATH"
+        print_warning "You may need to restart your terminal or run 'source ~/.zprofile' to update PATH"
         INSTALLATION_ISSUES=true
         return 1
     fi
@@ -526,7 +682,7 @@ verify_tool() {
 # Check shell tools
 verify_tool zsh
 verify_tool git
-verify_tool neovim
+verify_tool nvim
 verify_tool tmux
 
 # Check runtime managers
@@ -542,19 +698,6 @@ if command -v mise &> /dev/null; then
         print_warning "Node.js not available through mise. Try running: mise install nodejs@lts"
         INSTALLATION_ISSUES=true
     fi
-fi
-
-# Check editors
-if command -v code &> /dev/null; then
-    print_status "VSCode is installed"
-else
-    print_warning "VSCode is not installed or not in PATH"
-fi
-
-if command -v cursor &> /dev/null; then
-    print_status "Cursor IDE is installed"
-else
-    print_warning "Cursor IDE is not installed or not in PATH"
 fi
 
 # Final message

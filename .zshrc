@@ -186,4 +186,4 @@ esac
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # Added by Windsurf
-export PATH="/Users/riez/.codeium/windsurf/bin:$PATH"
+export PATH="$HOME/.codeium/windsurf/bin:$PATH"

@@ -29,7 +29,6 @@ fi
 if [[ -f "$HOME/.config/zsh/antigen.zsh" ]]; then
     source "$HOME/.config/zsh/antigen.zsh"
 
-    antigen theme romkatv/powerlevel10k
     antigen bundles <<EOBUNDLES
         git
         aws
@@ -172,8 +171,14 @@ fi
 
 # Custom Aliases
 alias vi="nvim"
-alias aws='docker run --rm -ti -v ~/.aws:/root/.aws -v $(pwd):/aws amazon/aws-cli'
-alias swagger='docker run --rm -it  --user $(id -u):$(id -g) -v $HOME:$HOME -w $PWD ghcr.io/go-swagger/go-swagger'
+
+# Docker-dependent aliases - only define if Docker is available
+if command -v docker &> /dev/null; then
+    alias aws='docker run --rm -ti -v ~/.aws:/root/.aws -v $(pwd):/aws amazon/aws-cli'
+    alias swagger='docker run --rm -it  --user $(id -u):$(id -g) -v $HOME:$HOME -w $PWD ghcr.io/go-swagger/go-swagger'
+else
+    echo "Docker not found. Some aliases requiring Docker were not defined."
+fi
 
 # Local bin
 case ":$PATH:" in

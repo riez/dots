@@ -328,6 +328,51 @@ EOF
     fi
 fi
 
+# Add cloud tools paths to .zprofile for persistence across sessions
+print_status "Configuring cloud development environment paths..."
+
+# Create or append to .zprofile
+touch "$HOME/.zprofile"
+
+# AWS paths
+if [ -d "$HOME/.aws" ]; then
+    if ! grep -q "AWS_CONFIG_FILE" "$HOME/.zprofile"; then
+        echo '# AWS configuration' >> "$HOME/.zprofile"
+        echo 'export AWS_CONFIG_FILE="$HOME/.aws/config"' >> "$HOME/.zprofile"
+        echo 'export AWS_SHARED_CREDENTIALS_FILE="$HOME/.aws/credentials"' >> "$HOME/.zprofile"
+    fi
+fi
+
+# Google Cloud SDK paths
+if [[ "$(uname)" == "Linux" ]]; then
+    # For Linux
+    if [ -d "/usr/lib/google-cloud-sdk" ] && ! grep -q "google-cloud-sdk" "$HOME/.zprofile"; then
+        echo '# Google Cloud SDK configuration' >> "$HOME/.zprofile"
+        echo 'export CLOUDSDK_ROOT_DIR="/usr/lib/google-cloud-sdk"' >> "$HOME/.zprofile"
+        echo 'export PATH="$PATH:/usr/lib/google-cloud-sdk/bin"' >> "$HOME/.zprofile"
+    fi
+elif [[ "$(uname)" == "Darwin" ]]; then
+    # For macOS
+    if [ -d "/usr/local/Caskroom/google-cloud-sdk" ] && ! grep -q "google-cloud-sdk" "$HOME/.zprofile"; then
+        echo '# Google Cloud SDK configuration' >> "$HOME/.zprofile"
+        echo 'export CLOUDSDK_ROOT_DIR="/usr/local/Caskroom/google-cloud-sdk"' >> "$HOME/.zprofile"
+        echo 'source "/usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/path.zsh.inc"' >> "$HOME/.zprofile"
+        echo 'source "/usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/completion.zsh.inc"' >> "$HOME/.zprofile"
+    fi
+fi
+
+# Azure paths and environment variables
+if ! grep -q "AZURE_CONFIG_DIR" "$HOME/.zprofile"; then
+    echo '# Azure CLI configuration' >> "$HOME/.zprofile"
+    echo 'export AZURE_CONFIG_DIR="$HOME/.azure"' >> "$HOME/.zprofile"
+fi
+
+# Firebase config
+if command -v firebase &> /dev/null && ! grep -q "FIREBASE_CONFIG" "$HOME/.zprofile"; then
+    echo '# Firebase configuration' >> "$HOME/.zprofile"
+    echo 'export FIREBASE_CONFIG="$HOME/.config/firebase"' >> "$HOME/.zprofile"
+fi
+
 # Install Python tools
 print_status "Installing Python tools..."
 brew install pyenv
@@ -583,6 +628,210 @@ if command -v npm &> /dev/null; then
     npm install -g typeorm
 fi
 
+# Install Firebase tools
+print_status "Installing Firebase tools and development environment..."
+if command -v npm &> /dev/null; then
+    npm install -g firebase-tools
+    npm install -g @firebase/cli
+
+    # Initialize Firebase
+    print_status "Setting up Firebase configuration directory..."
+    mkdir -p "$HOME/.config/firebase"
+fi
+
+# Install AWS CLI and development tools
+print_status "Installing AWS CLI and development tools..."
+if [[ "$(uname)" == "Linux" ]]; then
+    # Install AWS CLI v2
+    print_status "Installing AWS CLI v2..."
+    cd /tmp
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip -q awscliv2.zip
+    sudo ./aws/install
+    rm -rf aws awscliv2.zip
+    
+    # Install AWS SAM CLI
+    print_status "Installing AWS SAM CLI..."
+    # Install prerequisites
+    sudo apt update
+    sudo apt install -y python3-pip
+    pip3 install aws-sam-cli
+    
+    # Install AWS CDK
+    print_status "Installing AWS CDK..."
+    if command -v npm &> /dev/null; then
+        npm install -g aws-cdk
+    fi
+    
+    # Install AWS Amplify CLI
+    print_status "Installing AWS Amplify CLI..."
+    if command -v npm &> /dev/null; then
+        npm install -g @aws-amplify/cli
+    fi
+    
+    # Install additional AWS tools
+    print_status "Installing additional AWS development tools..."
+    pip3 install boto3 awscli-local
+
+elif [[ "$(uname)" == "Darwin" ]]; then
+    # Install AWS tools via Homebrew
+    brew install awscli
+    brew install aws-sam-cli
+    
+    # Install AWS CDK and Amplify via npm
+    if command -v npm &> /dev/null; then
+        npm install -g aws-cdk
+        npm install -g @aws-amplify/cli
+    fi
+    
+    # Install additional AWS tools
+    pip3 install boto3 awscli-local
+fi
+
+# Create AWS config directory
+mkdir -p "$HOME/.aws"
+
+# Install Google Cloud SDK
+print_status "Installing Google Cloud SDK..."
+if [[ "$(uname)" == "Linux" ]]; then
+    # Install dependencies
+    sudo apt update
+    sudo apt install -y apt-transport-https ca-certificates gnupg curl
+    
+    # Add Google Cloud SDK distribution URI as a package source
+    print_status "Adding Google Cloud SDK repository..."
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+    
+    # Import Google Cloud public key
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+    
+    # Update and install the SDK
+    sudo apt update
+    sudo apt install -y google-cloud-sdk google-cloud-sdk-app-engine-python google-cloud-sdk-app-engine-python-extras google-cloud-sdk-datastore-emulator google-cloud-sdk-pubsub-emulator
+    
+    # Install Firebase emulator dependencies
+    sudo apt install -y openjdk-17-jdk
+    
+elif [[ "$(uname)" == "Darwin" ]]; then
+    # Install Google Cloud SDK via Homebrew
+    brew install --cask google-cloud-sdk
+fi
+
+# Initialize gcloud directory
+mkdir -p "$HOME/.config/gcloud"
+
+# Install Firebase emulators if npm is available
+if command -v npm &> /dev/null && command -v firebase &> /dev/null; then
+    print_status "Setting up Firebase emulators..."
+    firebase setup:emulators:firestore
+    firebase setup:emulators:database
+    firebase setup:emulators:pubsub
+    firebase setup:emulators:storage
+    firebase setup:emulators:ui
+fi
+
+# Install Azure CLI and development tools
+print_status "Installing Azure CLI and development tools..."
+if [[ "$(uname)" == "Linux" ]]; then
+    # Install dependencies
+    sudo apt update
+    sudo apt install -y ca-certificates curl apt-transport-https lsb-release gnupg
+    
+    # Download and install the Microsoft signing key
+    print_status "Adding Microsoft repository..."
+    curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
+    
+    # Add the Azure CLI software repository
+    AZ_REPO=$(lsb_release -cs)
+    if [[ "$AZ_REPO" == "noble" ]]; then
+        # Use jammy repo for noble (24.04) until dedicated repo is available
+        AZ_REPO="jammy"
+    fi
+    echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
+    
+    # Update repository and install Azure CLI
+    sudo apt update
+    sudo apt install -y azure-cli
+    
+    # Install Azure Functions Core Tools
+    print_status "Installing Azure Functions Core Tools..."
+    curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+    sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg
+    sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-$(lsb_release -cs)-prod $(lsb_release -cs) main" > /etc/apt/sources.list.d/dotnetdev.list'
+    sudo apt update
+    sudo apt install -y azure-functions-core-tools-4
+    
+    # Install Azure Dev CLI
+    print_status "Installing Azure Dev CLI..."
+    curl -fsSL https://aka.ms/install-azd.sh | bash
+    
+    # Install Azure Static Web Apps CLI
+    if command -v npm &> /dev/null; then
+        npm install -g @azure/static-web-apps-cli
+    fi
+    
+elif [[ "$(uname)" == "Darwin" ]]; then
+    # Install Azure CLI via Homebrew
+    brew install azure-cli
+    
+    # Install Azure Functions Core Tools
+    brew tap azure/functions
+    brew install azure-functions-core-tools@4
+    
+    # Install Azure Dev CLI
+    brew install azure/azd/azd
+    
+    # Install Azure Static Web Apps CLI
+    if command -v npm &> /dev/null; then
+        npm install -g @azure/static-web-apps-cli
+    fi
+fi
+
+# Create Azure config directory
+mkdir -p "$HOME/.azure"
+
+# Create aliases for cloud development
+print_status "Creating cloud development aliases..."
+cat > "$HOME/.config/zsh/cloud_aliases.zsh" << EOF
+# Firebase aliases
+alias fb='firebase'
+alias fbdeploy='firebase deploy'
+alias fbserve='firebase serve'
+alias fbemu='firebase emulators:start'
+
+# AWS aliases
+alias awsp='aws --profile'
+alias cdks='cdk synth'
+alias cdkd='cdk deploy'
+alias cdkdiff='cdk diff'
+alias samd='sam deploy'
+alias samb='sam build'
+alias saml='sam local'
+
+# Google Cloud aliases
+alias gcl='gcloud'
+alias gcauth='gcloud auth login'
+alias gcconf='gcloud config'
+alias gcproj='gcloud config set project'
+
+# Azure aliases
+alias azl='az login'
+alias azacct='az account show'
+alias azgroup='az group'
+alias azfunc='func'
+alias azdeploy='az deployment'
+EOF
+
+# Add cloud aliases to zshrc if not already included
+if [ -f "$HOME/.zshrc" ]; then
+    if ! grep -q "source \$HOME/.config/zsh/cloud_aliases.zsh" "$HOME/.zshrc"; then
+        echo '# Load cloud development aliases' >> "$HOME/.zshrc"
+        echo 'if [ -f "$HOME/.config/zsh/cloud_aliases.zsh" ]; then' >> "$HOME/.zshrc"
+        echo '  source $HOME/.config/zsh/cloud_aliases.zsh' >> "$HOME/.zshrc"
+        echo 'fi' >> "$HOME/.zshrc"
+    fi
+fi
+
 # Final setup
 print_status "Performing final setup..."
 
@@ -698,6 +947,71 @@ if command -v mise &> /dev/null; then
         print_warning "Node.js not available through mise. Try running: mise install nodejs@lts"
         INSTALLATION_ISSUES=true
     fi
+fi
+
+# Check cloud development tools
+print_status "Verifying cloud development tools..."
+
+# Check Firebase tools
+if verify_tool firebase; then
+    FIREBASE_VERSION=$(firebase --version)
+    print_status "Firebase CLI version: $FIREBASE_VERSION"
+else
+    print_warning "Firebase CLI not found. You may need to restart your terminal or run 'npm install -g firebase-tools'"
+fi
+
+# Check AWS CLI
+if verify_tool aws; then
+    AWS_VERSION=$(aws --version)
+    print_status "AWS CLI version: $AWS_VERSION"
+    
+    # Check AWS CDK
+    if verify_tool cdk; then
+        CDK_VERSION=$(cdk --version)
+        print_status "AWS CDK version: $CDK_VERSION"
+    fi
+    
+    # Check AWS SAM CLI
+    if verify_tool sam; then
+        SAM_VERSION=$(sam --version)
+        print_status "AWS SAM CLI version: $SAM_VERSION"
+    fi
+    
+    # Check AWS Amplify CLI
+    if verify_tool amplify; then
+        AMPLIFY_VERSION=$(amplify --version)
+        print_status "AWS Amplify CLI version: $AMPLIFY_VERSION"
+    fi
+else
+    print_warning "AWS CLI not found. You may need to restart your terminal or check the AWS installation"
+fi
+
+# Check Google Cloud SDK
+if verify_tool gcloud; then
+    GCLOUD_VERSION=$(gcloud --version | head -n 1)
+    print_status "Google Cloud SDK: $GCLOUD_VERSION"
+else
+    print_warning "Google Cloud SDK not found. You may need to restart your terminal or check the gcloud installation"
+fi
+
+# Check Azure CLI
+if verify_tool az; then
+    AZ_VERSION=$(az --version | grep "azure-cli" | head -n 1)
+    print_status "Azure CLI: $AZ_VERSION"
+    
+    # Check Azure Functions Core Tools
+    if verify_tool func; then
+        FUNC_VERSION=$(func --version)
+        print_status "Azure Functions Core Tools version: $FUNC_VERSION"
+    fi
+    
+    # Check Azure Developer CLI
+    if verify_tool azd; then
+        AZD_VERSION=$(azd version)
+        print_status "Azure Developer CLI version: $AZD_VERSION"
+    fi
+else
+    print_warning "Azure CLI not found. You may need to restart your terminal or check the Azure CLI installation"
 fi
 
 # Final message

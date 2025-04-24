@@ -1,3 +1,5 @@
+export LANG=en_US.UTF-8
+
 # Enable Powerlevel10k instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
@@ -56,6 +58,60 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
 if [[ "$IS_WSL" == true ]]; then
     ZSH_TMUX_ITERM2=false
     alias tmux="tmux -CC"
+    # Add Rancher Desktop to PATH with dynamic Windows username
+    if [[ -d "/mnt/c/Users" ]]; then
+        # Get Windows username by finding the first directory that isn't Public or Default
+        WIN_USERNAME=$(ls -1 /mnt/c/Users/ | grep -v "Public\|Default\|All Users\|Default User\|desktop.ini" | head -1)
+        if [[ -n "$WIN_USERNAME" ]]; then
+            # Create a more reliable path with proper escaping
+            export RANCHER_PATH=/mnt/c/Users/$WIN_USERNAME/AppData/Local/Programs/Rancher\ Desktop/resources/resources/linux
+            
+            # Make sure docker is added to path directly
+            if [[ -f "$RANCHER_PATH/bin/docker" ]]; then
+                export PATH="$PATH:$RANCHER_PATH"
+                export PATH="$PATH:$RANCHER_PATH/bin"
+                export PATH="$PATH:$RANCHER_PATH/docker-cli-plugins"
+                export PATH="$PATH:$RANCHER_PATH/internal"
+                
+                # Create links to all docker binaries in a location without spaces
+                mkdir -p $HOME/bin
+                
+                # Link all binaries from the bin directory
+                for file in "$RANCHER_PATH/bin"/*; do
+                    if [[ -f "$file" && -x "$file" ]]; then
+                        binary_name=$(basename "$file")
+                        ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
+                    fi
+                done
+                
+                # Link all binaries from docker-cli-plugins directory
+                if [[ -d "$RANCHER_PATH/docker-cli-plugins" ]]; then
+                    for file in "$RANCHER_PATH/docker-cli-plugins"/*; do
+                        if [[ -f "$file" && -x "$file" ]]; then
+                            binary_name=$(basename "$file")
+                            ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
+                        fi
+                    done
+                fi
+                
+                # Link other important binaries from internal directory
+                if [[ -d "$RANCHER_PATH/internal" ]]; then
+                    for file in "$RANCHER_PATH/internal"/*; do
+                        if [[ -f "$file" && -x "$file" ]]; then
+                            binary_name=$(basename "$file")
+                            # Only link specific internal binaries as needed
+                            if [[ "$binary_name" == "containerd" || "$binary_name" == "nerdctl" || "$binary_name" == "ctr" ]]; then
+                                ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
+                            fi
+                        fi
+                    done
+                fi
+            else
+                echo "Windows username: $WIN_USERNAME"
+                echo "Docker binary not found in Rancher Desktop"
+            fi
+        fi
+    fi
     # Add any other WSL-specific configurations here
 fi
 

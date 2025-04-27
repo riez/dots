@@ -106,11 +106,17 @@ if ! command -v brew &> /dev/null; then
     
     # Add Homebrew to PATH based on OS
     if [[ "$(uname)" == "Linux" ]]; then
-        echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> "$HOME/.zprofile"
-        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        BREW_PATH="/home/linuxbrew/.linuxbrew/bin/brew"
+        if ! grep -q "eval \\\"\\$(\\$BREW_PATH shellenv)\\\"" "$HOME/.zprofile"; then
+            echo 'eval "$('$BREW_PATH' shellenv)"' >> "$HOME/.zprofile"
+        fi
+        eval "$($BREW_PATH shellenv)"
     elif [[ "$(uname)" == "Darwin" ]]; then
-        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$HOME/.zprofile"
-        eval "$(/opt/homebrew/bin/brew shellenv)"
+        BREW_PATH="/opt/homebrew/bin/brew"
+        if ! grep -q "eval \\\"\\$(\\$BREW_PATH shellenv)\\\"" "$HOME/.zprofile"; then
+            echo 'eval "$('$BREW_PATH' shellenv)"' >> "$HOME/.zprofile"
+        fi
+        eval "$($BREW_PATH shellenv)"
     fi
 fi
 
@@ -132,8 +138,17 @@ git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$
 print_status "Installing core tools..."
 brew install \
     tmux \
-    mise \
     git
+
+# Install mise directly
+print_status "Installing mise directly..."
+if ! command -v mise &> /dev/null; then
+    curl -fsSL https://mise.run | sh
+    # Ensure mise is available in the current session's PATH
+    export PATH="$HOME/.local/bin:$PATH"
+else
+    print_status "mise is already installed."
+fi
 
 # Install Neovim with multiple fallback methods
 print_status "Installing Neovim..."
@@ -203,7 +218,7 @@ if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
     fi
     
     # Add to PATH if not already there
-    if ! grep -q "$HOME/bin" "$HOME/.zprofile"; then
+    if ! grep -q 'export PATH="$HOME/bin:$PATH"' "$HOME/.zprofile"; then
         echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.zprofile"
     fi
     
@@ -260,8 +275,10 @@ fi
 # Set up mise as the unified version manager
 print_status "Setting up mise as the unified runtime version manager..."
 if command -v mise &> /dev/null; then
-    # Configure mise in shell
-    echo 'eval "$(mise activate zsh)"' >> "$HOME/.zprofile"
+    # Configure mise in shell if not already configured
+    if ! grep -q 'eval "$(mise activate zsh)"' "$HOME/.zprofile"; then
+        echo 'eval "$(mise activate zsh)"' >> "$HOME/.zprofile"
+    fi
     
     # Create mise config directory with proper permissions
     mkdir -p "$HOME/.config" || sudo mkdir -p "$HOME/.config"
@@ -473,12 +490,16 @@ if [[ "$(uname)" == "Linux" ]]; then
     
     # Setup Android SDK path
     mkdir -p "$HOME/Android/Sdk"
-    echo 'export ANDROID_HOME="$HOME/Android/Sdk"' >> "$HOME/.zprofile"
-    echo 'export PATH="$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools"' >> "$HOME/.zprofile"
+    if ! grep -q 'export ANDROID_HOME="$HOME/Android/Sdk"' "$HOME/.zprofile"; then
+        echo 'export ANDROID_HOME="$HOME/Android/Sdk"' >> "$HOME/.zprofile"
+        echo 'export PATH="$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools"' >> "$HOME/.zprofile"
+    fi
 elif [[ "$(uname)" == "Darwin" ]]; then
     brew install --cask android-studio android-platform-tools adoptopenjdk/openjdk/adoptopenjdk11
-    echo 'export ANDROID_HOME="$HOME/Library/Android/sdk"' >> "$HOME/.zprofile"
-    echo 'export PATH="$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools"' >> "$HOME/.zprofile"
+    if ! grep -q 'export ANDROID_HOME="$HOME/Library/Android/sdk"' "$HOME/.zprofile"; then
+        echo 'export ANDROID_HOME="$HOME/Library/Android/sdk"' >> "$HOME/.zprofile"
+        echo 'export PATH="$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools"' >> "$HOME/.zprofile"
+    fi
 fi
 
 # Install React Native CLI
@@ -516,8 +537,11 @@ if [[ "$(uname)" == "Linux" ]]; then
         curl -O https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.19.4-stable.tar.xz
         tar xf flutter_linux_*.tar.xz
         rm flutter_linux_*.tar.xz
-        echo 'export PATH="$PATH:$HOME/development/flutter/bin"' >> "$HOME/.zprofile"
-        
+        FLUTTER_PATH="$HOME/development/flutter/bin"
+        if ! grep -q "export PATH=\\\".*${FLUTTER_PATH}.*\\\"" "$HOME/.zprofile"; then
+             echo "export PATH=\\"\\$PATH:${FLUTTER_PATH}\\"" >> "$HOME/.zprofile"
+        fi
+
         # Configure Flutter to use proper display
         if [[ -f /proc/version && $(grep -i microsoft /proc/version) ]]; then
             print_status "Configuring Flutter for WSL environment..."
@@ -877,8 +901,9 @@ kernelCommandLine=net.ifnames=0
 EOF
     fi
     
-    # Add WSL-specific settings to .zprofile
-    cat >> "$HOME/.zprofile" << EOF
+    # Add WSL-specific settings to .zprofile if not already present
+    if ! grep -q "# WSL2-specific settings" "$HOME/.zprofile"; then
+        cat >> "$HOME/.zprofile" << EOF
 
 # WSL2-specific settings
 export BROWSER=wslview
@@ -887,6 +912,7 @@ export DISPLAY=:0
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 EOF
+    fi
 
     # Check for common WSL2 issues
     print_status "Checking for common WSL2 issues..."

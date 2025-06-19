@@ -1,14 +1,32 @@
 export LANG=en_US.UTF-8
 
+# Set default TERM if not set to avoid tput errors
+export TERM=${TERM:-xterm-256color}
+
+# Disable gitstatus debug logging to prevent initialization errors
+# GITSTATUS_LOG_LEVEL=DEBUG
+
 # Enable Powerlevel10k instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code-insiders --locate-shell-integration-path zsh)"
+
+
 # Oh My Zsh Configuration
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="powerlevel10k/powerlevel10k"
-source $ZSH/oh-my-zsh.sh
+
+# Disable monitor mode to prevent setopt errors in non-interactive contexts
+if [[ -o interactive ]]; then
+    setopt monitor
+fi
+
+# Only source Oh My Zsh if the directory exists and we're in a proper shell
+if [[ -d "$ZSH" && -n "$ZSH_VERSION" ]]; then
+    source $ZSH/oh-my-zsh.sh
+fi
 
 # Path Configuration
 export PATH="$HOME/bin:/usr/local/bin:/usr/local/sbin:~/bin:$PATH"
@@ -222,21 +240,21 @@ else
     echo "mise not found. Install with: brew install mise"
 fi
 
-## Pyenv (Python)
-if command -v pyenv &> /dev/null; then
-    export PYENV_ROOT="$HOME/.pyenv"
-    command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-    eval "$(pyenv init -)"
-else
-    echo "pyenv not found. Install with: brew install pyenv"
-fi
+# ## Pyenv (Python)
+# if command -v pyenv &> /dev/null; then
+#     export PYENV_ROOT="$HOME/.pyenv"
+#     command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+#     eval "$(pyenv init -)"
+# else
+#     echo "pyenv not found. Install with: brew install pyenv"
+# fi
 
-## Rbenv (Ruby)
-if command -v rbenv &> /dev/null; then
-    eval "$(rbenv init - zsh)"
-else
-    echo "rbenv not found. Install with: brew install rbenv"
-fi
+# ## Rbenv (Ruby)
+# if command -v rbenv &> /dev/null; then
+#     eval "$(rbenv init - zsh)"
+# else
+#     echo "rbenv not found. Install with: brew install rbenv"
+# fi
 
 # Package Managers
 ## Homebrew
@@ -253,7 +271,7 @@ else
 fi
 
 ## PNPM
-export PNPM_HOME="$HOME/Library/pnpm"
+export PNPM_HOME=""
 case ":$PATH:" in
     *":$PNPM_HOME:"*) ;;
     *) export PATH="$PNPM_HOME:$PATH" ;;
@@ -318,12 +336,12 @@ fi
 alias vi="nvim"
 
 # Docker-dependent aliases - only define if Docker is available
-if command -v docker &> /dev/null; then
-    alias aws='docker run --rm -ti -v ~/.aws:/root/.aws -v $(pwd):/aws amazon/aws-cli'
-    alias swagger='docker run --rm -it  --user $(id -u):$(id -g) -v $HOME:$HOME -w $PWD ghcr.io/go-swagger/go-swagger'
-else
-    echo "Docker not found. Some aliases requiring Docker were not defined."
-fi
+# if command -v docker &> /dev/null; then
+#     alias aws='docker run --rm -ti -v ~/.aws:/root/.aws -v $(pwd):/aws amazon/aws-cli'
+#     alias swagger='docker run --rm -it  --user $(id -u):$(id -g) -v $HOME:$HOME -w $PWD ghcr.io/go-swagger/go-swagger'
+# else
+#     echo "Docker not found. Some aliases requiring Docker were not defined."
+# fi
 
 # Local bin
 case ":$PATH:" in
@@ -331,8 +349,14 @@ case ":$PATH:" in
     *) export PATH="$PATH:$HOME/bin" ;;
 esac
 
-# Load Powerlevel10k Theme
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# Load Powerlevel10k Theme with gitstatus safeguards
+if [[ -f ~/.p10k.zsh ]]; then
+    # Set gitstatus environment variables to prevent errors
+    export GITSTATUS_LOG_LEVEL=${GITSTATUS_LOG_LEVEL:-INFO}
+    export GITSTATUS_NUM_THREADS=${GITSTATUS_NUM_THREADS:-2}
+    
+    source ~/.p10k.zsh
+fi
 
 # Added by Windsurf
 export PATH="$HOME/.codeium/windsurf/bin:$PATH"
@@ -355,3 +379,12 @@ if [ -d "$_GCLOUD_SDK_PATH" ]; then
 fi
 # Clean up temporary variable
 unset _GCLOUD_SDK_PATH
+# Load cloud development aliases
+if [ -f "$HOME/.config/zsh/cloud_aliases.zsh" ]; then
+  source $HOME/.config/zsh/cloud_aliases.zsh
+fi
+# The following lines have been added by Docker Desktop to enable Docker CLI completions.
+fpath=($HOME/.docker/completions $fpath)
+autoload -Uz compinit
+compinit
+# End of Docker CLI completions

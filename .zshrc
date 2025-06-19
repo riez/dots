@@ -8,6 +8,9 @@ export TERM=${TERM:-xterm-256color}
 
 # Enable Powerlevel10k instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  # Fix for bogus screen size issue
+  export COLUMNS=80
+  export LINES=24
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 

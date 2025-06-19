@@ -8,10 +8,14 @@ export TERM=${TERM:-xterm-256color}
 
 # Enable Powerlevel10k instant prompt
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  # Fix for bogus screen size issue
-  export COLUMNS=80
-  export LINES=24
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+    source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# WSL-specific screen size fix
+if grep -qEi "(Microsoft|WSL)" /proc/version &> /dev/null; then
+    # Only apply fix if running in WSL
+    export COLUMNS=$(tput cols)
+    export LINES=$(tput lines)
 fi
 
 [[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code-insiders --locate-shell-integration-path zsh)"
@@ -216,7 +220,10 @@ if [[ "$IS_WSL" == true ]]; then
                 fi
 
             else
-                 echo "Rancher Desktop path not found for user $WIN_USERNAME at $POTENTIAL_RANCHER_PATH"
+                 # Only show Rancher Desktop warning if Docker Desktop is not being used
+                 if ! docker info 2>/dev/null | grep -q "Docker Desktop"; then
+                     echo "Rancher Desktop path not found for user $WIN_USERNAME at $POTENTIAL_RANCHER_PATH"
+                 fi
             fi
         else
             echo "Could not determine Windows username in /mnt/c/Users/"

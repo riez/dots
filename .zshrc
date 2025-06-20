@@ -25,11 +25,6 @@ fi
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="powerlevel10k/powerlevel10k"
 
-# Disable monitor mode to prevent setopt errors in non-interactive contexts
-if [[ -o interactive ]]; then
-    setopt monitor
-fi
-
 # Only source Oh My Zsh if the directory exists and we're in a proper shell
 if [[ -d "$ZSH" && -n "$ZSH_VERSION" ]]; then
     source $ZSH/oh-my-zsh.sh

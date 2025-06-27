@@ -229,7 +229,8 @@ fi
 
 # Version Managers
 ## GVM (Go)
-[[ -s "$HOME/.gvm/scripts/gvm" ]] && source "$HOME/.gvm/scripts/gvm"
+# Loaded via antigen plugin
+
 
 ## FNM (Node.js)
 if command -v fnm &> /dev/null; then

@@ -74,158 +74,158 @@ fi
 [ "$TERM" = "xterm-kitty" ] && alias ssh="kitty +kitten ssh"
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
 
-# WSL-specific settings
-if [[ "$IS_WSL" == true ]]; then
-    ZSH_TMUX_ITERM2=false
-    alias tmux="tmux -CC"
-    # Add Rancher Desktop to PATH if installed
-    if [[ -d "/mnt/c/Users" ]]; then
-        # Get Windows username by finding the first directory that isn't Public or Default
-        WIN_USERNAME=$(ls -1 /mnt/c/Users/ | grep -v "Public\|Default\|All Users\|Default User\|desktop.ini" | head -1)
-        if [[ -n "$WIN_USERNAME" ]]; then
-            # Construct the potential Rancher Desktop path
-            POTENTIAL_RANCHER_PATH="/mnt/c/Users/$WIN_USERNAME/AppData/Local/Programs/Rancher Desktop/resources/resources/linux"
+# # WSL-specific settings
+# if [[ "$IS_WSL" == true ]]; then
+#     ZSH_TMUX_ITERM2=false
+#     alias tmux="tmux -CC"
+#     # Add Rancher Desktop to PATH if installed
+#     if [[ -d "/mnt/c/Users" ]]; then
+#         # Get Windows username by finding the first directory that isn't Public or Default
+#         WIN_USERNAME=$(ls -1 /mnt/c/Users/ | grep -v "Public\|Default\|All Users\|Default User\|desktop.ini" | head -1)
+#         if [[ -n "$WIN_USERNAME" ]]; then
+#             # Construct the potential Rancher Desktop path
+#             POTENTIAL_RANCHER_PATH="/mnt/c/Users/$WIN_USERNAME/AppData/Local/Programs/Rancher Desktop/resources/resources/linux"
 
-            # Check if the Rancher Desktop path actually exists
-            if [[ -d "$POTENTIAL_RANCHER_PATH" ]]; then
-                export RANCHER_PATH="$POTENTIAL_RANCHER_PATH"
+#             # Check if the Rancher Desktop path actually exists
+#             if [[ -d "$POTENTIAL_RANCHER_PATH" ]]; then
+#                 export RANCHER_PATH="$POTENTIAL_RANCHER_PATH"
 
-                # Add Rancher Desktop directories to PATH
-                export PATH="$PATH:$RANCHER_PATH/bin"
-                export PATH="$PATH:$RANCHER_PATH/docker-cli-plugins"
-                export PATH="$PATH:$RANCHER_PATH/internal" # Add internal if needed, be cautious
+#                 # Add Rancher Desktop directories to PATH
+#                 export PATH="$PATH:$RANCHER_PATH/bin"
+#                 export PATH="$PATH:$RANCHER_PATH/docker-cli-plugins"
+#                 export PATH="$PATH:$RANCHER_PATH/internal" # Add internal if needed, be cautious
 
-                # Create links to binaries in a location without spaces ($HOME/bin)
-                mkdir -p "$HOME/bin"
+#                 # Create links to binaries in a location without spaces ($HOME/bin)
+#                 mkdir -p "$HOME/bin"
 
-                # Link binaries from the bin directory
-                for file in "$RANCHER_PATH/bin"/*; do
-                    if [[ -f "$file" && -x "$file" ]]; then
-                        binary_name=$(basename "$file")
-                        ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
-                    fi
-                done
+#                 # Link binaries from the bin directory
+#                 for file in "$RANCHER_PATH/bin"/*; do
+#                     if [[ -f "$file" && -x "$file" ]]; then
+#                         binary_name=$(basename "$file")
+#                         ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
+#                     fi
+#                 done
 
-                # Link binaries from docker-cli-plugins directory
-                if [[ -d "$RANCHER_PATH/docker-cli-plugins" ]]; then
-                    for file in "$RANCHER_PATH/docker-cli-plugins"/*; do
-                        if [[ -f "$file" && -x "$file" ]]; then
-                            binary_name=$(basename "$file")
-                            ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
-                        fi
-                    done
-                fi
+#                 # Link binaries from docker-cli-plugins directory
+#                 if [[ -d "$RANCHER_PATH/docker-cli-plugins" ]]; then
+#                     for file in "$RANCHER_PATH/docker-cli-plugins"/*; do
+#                         if [[ -f "$file" && -x "$file" ]]; then
+#                             binary_name=$(basename "$file")
+#                             ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
+#                         fi
+#                     done
+#                 fi
 
-                # Link specific important binaries from internal directory if needed
-                if [[ -d "$RANCHER_PATH/internal" ]]; then
-                    for file in "$RANCHER_PATH/internal"/*; do
-                        if [[ -f "$file" && -x "$file" ]]; then
-                            binary_name=$(basename "$file")
-                            # Only link specific internal binaries as needed
-                            if [[ "$binary_name" == "containerd" || "$binary_name" == "nerdctl" || "$binary_name" == "ctr" ]]; then
-                                ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
-                            fi
-                        fi
-                    done
-                fi
+#                 # Link specific important binaries from internal directory if needed
+#                 if [[ -d "$RANCHER_PATH/internal" ]]; then
+#                     for file in "$RANCHER_PATH/internal"/*; do
+#                         if [[ -f "$file" && -x "$file" ]]; then
+#                             binary_name=$(basename "$file")
+#                             # Only link specific internal binaries as needed
+#                             if [[ "$binary_name" == "containerd" || "$binary_name" == "nerdctl" || "$binary_name" == "ctr" ]]; then
+#                                 ln -sf "$file" "$HOME/bin/$binary_name" 2>/dev/null
+#                             fi
+#                         fi
+#                     done
+#                 fi
 
-                # Configure Docker to use Rancher Desktop properly
-                DOCKER_BIN="$HOME/bin/docker"
-                if [[ -x "$DOCKER_BIN" ]]; then
-                    # Make sure we're not using DOCKER_HOST variable which can override the context
-                    unset DOCKER_HOST
+#                 # Configure Docker to use Rancher Desktop properly
+#                 DOCKER_BIN="$HOME/bin/docker"
+#                 if [[ -x "$DOCKER_BIN" ]]; then
+#                     # Make sure we're not using DOCKER_HOST variable which can override the context
+#                     unset DOCKER_HOST
 
-                    # Find the Rancher Desktop Docker socket from possible locations
-                    SOCKET_PATHS=(
-                        "$HOME/.rd/docker.sock"                                 # Standard path
-                        "/run/rancher-desktop/docker.sock"                      # Alternative path
-                        "/run/user/$(id -u)/docker.sock"                        # User-specific path
-                        "/mnt/wsl/rancher-desktop/run/docker.sock"              # WSL-specific Rancher path 
-                        "/mnt/wsl/docker-desktop/docker.sock"                   # Docker Desktop path (fallback)
-                    )
+#                     # Find the Rancher Desktop Docker socket from possible locations
+#                     SOCKET_PATHS=(
+#                         "$HOME/.rd/docker.sock"                                 # Standard path
+#                         "/run/rancher-desktop/docker.sock"                      # Alternative path
+#                         "/run/user/$(id -u)/docker.sock"                        # User-specific path
+#                         "/mnt/wsl/rancher-desktop/run/docker.sock"              # WSL-specific Rancher path 
+#                         "/mnt/wsl/docker-desktop/docker.sock"                   # Docker Desktop path (fallback)
+#                     )
                     
-                    # Try to find the socket from standard locations
-                    RD_SOCKET=""
-                    for sock in "${SOCKET_PATHS[@]}"; do
-                        if [[ -S "$sock" ]]; then
-                            RD_SOCKET="$sock"
-                            break
-                        fi
-                    done
+#                     # Try to find the socket from standard locations
+#                     RD_SOCKET=""
+#                     for sock in "${SOCKET_PATHS[@]}"; do
+#                         if [[ -S "$sock" ]]; then
+#                             RD_SOCKET="$sock"
+#                             break
+#                         fi
+#                     done
                     
-                    # If not found in standard locations, check Windows paths
-                    if [[ -z "$RD_SOCKET" ]]; then
-                        # Try to find it in Windows paths
-                        if [[ -n "$WIN_USERNAME" ]]; then
-                            WIN_SOCKET_PATHS=(
-                                "/mnt/c/Users/$WIN_USERNAME/.rd/docker.sock"
-                                "/mnt/c/Users/$WIN_USERNAME/AppData/Local/rancher-desktop/run/docker.sock"
-                                "/mnt/c/Users/$WIN_USERNAME/AppData/Roaming/rancher-desktop/run/docker.sock"
-                            )
+#                     # If not found in standard locations, check Windows paths
+#                     if [[ -z "$RD_SOCKET" ]]; then
+#                         # Try to find it in Windows paths
+#                         if [[ -n "$WIN_USERNAME" ]]; then
+#                             WIN_SOCKET_PATHS=(
+#                                 "/mnt/c/Users/$WIN_USERNAME/.rd/docker.sock"
+#                                 "/mnt/c/Users/$WIN_USERNAME/AppData/Local/rancher-desktop/run/docker.sock"
+#                                 "/mnt/c/Users/$WIN_USERNAME/AppData/Roaming/rancher-desktop/run/docker.sock"
+#                             )
                             
-                            for sock in "${WIN_SOCKET_PATHS[@]}"; do
-                                if [[ -S "$sock" ]]; then
-                                    RD_SOCKET="$sock"
-                                    break
-                                fi
-                            done
-                        fi
-                    fi
+#                             for sock in "${WIN_SOCKET_PATHS[@]}"; do
+#                                 if [[ -S "$sock" ]]; then
+#                                     RD_SOCKET="$sock"
+#                                     break
+#                                 fi
+#                             done
+#                         fi
+#                     fi
                     
-                    # Handle case when no socket is found
-                    if [[ -z "$RD_SOCKET" ]]; then
-                        echo "Error: No Docker socket found. Ensure Rancher Desktop is running with WSL integration enabled."
-                    else
-                        # Fix socket permissions if needed
-                        if ! $DOCKER_BIN --host "unix://$RD_SOCKET" info &>/dev/null; then
-                            echo "Permission denied on socket: $RD_SOCKET - attempting to fix..."
+#                     # Handle case when no socket is found
+#                     if [[ -z "$RD_SOCKET" ]]; then
+#                         echo "Error: No Docker socket found. Ensure Rancher Desktop is running with WSL integration enabled."
+#                     else
+#                         # Fix socket permissions if needed
+#                         if ! $DOCKER_BIN --host "unix://$RD_SOCKET" info &>/dev/null; then
+#                             echo "Permission denied on socket: $RD_SOCKET - attempting to fix..."
                             
-                            # Try to fix permissions with sudo
-                            if command -v sudo &>/dev/null; then
-                                # Create docker group and add user if needed
-                                if ! groups | grep -q docker; then
-                                    sudo groupadd docker 2>/dev/null || true
-                                    sudo usermod -aG docker $(whoami)
-                                    echo "Added user to docker group. You may need to restart your terminal session for this to take effect."
-                                fi
+#                             # Try to fix permissions with sudo
+#                             if command -v sudo &>/dev/null; then
+#                                 # Create docker group and add user if needed
+#                                 if ! groups | grep -q docker; then
+#                                     sudo groupadd docker 2>/dev/null || true
+#                                     sudo usermod -aG docker $(whoami)
+#                                     echo "Added user to docker group. You may need to restart your terminal session for this to take effect."
+#                                 fi
                                 
-                                # Temporarily fix socket permissions
-                                sudo chmod 666 "$RD_SOCKET" 2>/dev/null || echo "Failed to adjust permissions."
-                            fi
-                        fi
+#                                 # Temporarily fix socket permissions
+#                                 sudo chmod 666 "$RD_SOCKET" 2>/dev/null || echo "Failed to adjust permissions."
+#                             fi
+#                         fi
                         
-                        # Set DOCKER_HOST explicitly to ensure all Docker commands use this socket
-                        export DOCKER_HOST="unix://$RD_SOCKET"
+#                         # Set DOCKER_HOST explicitly to ensure all Docker commands use this socket
+#                         export DOCKER_HOST="unix://$RD_SOCKET"
                         
-                    fi
-                fi
+#                     fi
+#                 fi
 
-                # Fix Docker credential helper if config doesn't exist
-                mkdir -p "$HOME/.docker"
-                if [[ ! -f "$HOME/.docker/config.json" ]]; then
-                    echo '{
-  "auths": {},
-  "currentContext": "rancher-desktop",
-  "credsStore": "desktop"
-}' > "$HOME/.docker/config.json"
-                elif ! grep -q '"currentContext": "rancher-desktop"' "$HOME/.docker/config.json"; then
-                     # If config exists but doesn't have the context set, update it (simple approach)
-                     # A more robust solution would parse and modify the JSON properly
-                     sed -i 's/"currentContext": "[^"]*"/"currentContext": "rancher-desktop"/' "$HOME/.docker/config.json"
-                fi
+#                 # Fix Docker credential helper if config doesn't exist
+#                 mkdir -p "$HOME/.docker"
+#                 if [[ ! -f "$HOME/.docker/config.json" ]]; then
+#                     echo '{
+#   "auths": {},
+#   "currentContext": "rancher-desktop",
+#   "credsStore": "desktop"
+# }' > "$HOME/.docker/config.json"
+#                 elif ! grep -q '"currentContext": "rancher-desktop"' "$HOME/.docker/config.json"; then
+#                      # If config exists but doesn't have the context set, update it (simple approach)
+#                      # A more robust solution would parse and modify the JSON properly
+#                      sed -i 's/"currentContext": "[^"]*"/"currentContext": "rancher-desktop"/' "$HOME/.docker/config.json"
+#                 fi
 
-            else
-                 # Only show Rancher Desktop warning if Docker Desktop is not being used
-                 if ! docker info 2>/dev/null | grep -q "Docker Desktop"; then
-                     echo "Rancher Desktop path not found for user $WIN_USERNAME at $POTENTIAL_RANCHER_PATH"
-                 fi
-            fi
-        else
-            echo "Could not determine Windows username in /mnt/c/Users/"
-        fi
-    fi
-    # Add any other WSL-specific configurations here
-fi
+#             else
+#                  # Only show Rancher Desktop warning if Docker Desktop is not being used
+#                  if ! docker info 2>/dev/null | grep -q "Docker Desktop"; then
+#                      echo "Rancher Desktop path not found for user $WIN_USERNAME at $POTENTIAL_RANCHER_PATH"
+#                  fi
+#             fi
+#         else
+#             echo "Could not determine Windows username in /mnt/c/Users/"
+#         fi
+#     fi
+#     # Add any other WSL-specific configurations here
+# fi
 
 # Version Managers
 ## GVM (Go)

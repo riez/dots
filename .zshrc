@@ -3,6 +3,8 @@ export LANG=en_US.UTF-8
 # Set default TERM if not set to avoid tput errors
 export TERM=${TERM:-xterm-256color}
 
+source $HOME/.env
+
 # Disable gitstatus debug logging to prevent initialization errors
 # GITSTATUS_LOG_LEVEL=DEBUG
 
@@ -234,7 +236,7 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
 
 ## FNM (Node.js)
 if command -v fnm &> /dev/null; then
-    eval "$(fnm env --use-on-cd)"
+    eval "$(fnm env)"
 else
     echo "fnm not found. Install with: brew install fnm"
 fi

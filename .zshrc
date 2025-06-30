@@ -232,6 +232,11 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
 # Version Managers
 ## GVM (Go)
 # Loaded via antigen plugin
+# Fix for GVM in non-interactive shells
+if [[ -s "$HOME/.gvm/scripts/gvm" ]] && [[ -z "$GVM_INIT_DONE" ]]; then
+    export GVM_INIT_DONE=1
+    source "$HOME/.gvm/scripts/gvm"
+fi
 
 
 ## FNM (Node.js)

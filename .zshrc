@@ -5,6 +5,8 @@ export TERM=${TERM:-xterm-256color}
 
 source $HOME/.env
 
+export CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1
+
 # Disable gitstatus debug logging to prevent initialization errors
 # GITSTATUS_LOG_LEVEL=DEBUG
 

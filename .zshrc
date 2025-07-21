@@ -22,7 +22,7 @@ if grep -qEi "(Microsoft|WSL)" /proc/version &> /dev/null; then
     export LINES=$(tput lines)
 fi
 
-[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code-insiders --locate-shell-integration-path zsh)"
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
 
 
 # Oh My Zsh Configuration
@@ -231,6 +231,18 @@ ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
 #     # Add any other WSL-specific configurations here
 # fi
 
+# Package Managers - Initialize first to make tools available
+## Homebrew
+if [[ "$IS_LINUX" == true ]] && [[ -f "/home/linuxbrew/.linuxbrew/bin/brew" ]]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+    export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+elif [[ "$IS_MAC" == true ]] && [[ -f "/opt/homebrew/bin/brew" ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+    export PATH="/opt/homebrew/bin:$PATH"
+elif ! command -v brew &> /dev/null; then
+    echo "Homebrew not found. Install from: https://brew.sh"
+fi
+
 # Version Managers
 ## GVM (Go)
 # Loaded via antigen plugin
@@ -242,14 +254,26 @@ fi
 
 
 ## FNM (Node.js)
-if command -v fnm &> /dev/null; then
+# Check common installation paths first
+if [[ -f "$HOME/.local/share/fnm/fnm" ]]; then
+    export PATH="$HOME/.local/share/fnm:$PATH"
+    eval "$($HOME/.local/share/fnm/fnm env)"
+elif [[ -f "/home/linuxbrew/.linuxbrew/bin/fnm" ]]; then
+    eval "$(fnm env)"
+elif command -v fnm &> /dev/null; then
     eval "$(fnm env)"
 else
     echo "fnm not found. Install with: brew install fnm"
 fi
 
 ## Mise (Runtime Manager)
-if command -v mise &> /dev/null; then
+# Check common installation paths first
+if [[ -f "$HOME/.local/bin/mise" ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+    eval "$($HOME/.local/bin/mise activate zsh)"
+elif [[ -f "/home/linuxbrew/.linuxbrew/bin/mise" ]]; then
+    eval "$(mise activate zsh)"
+elif command -v mise &> /dev/null; then
     eval "$(mise activate zsh)"
 else
     echo "mise not found. Install with: brew install mise"
@@ -271,20 +295,7 @@ fi
 #     echo "rbenv not found. Install with: brew install rbenv"
 # fi
 
-# Package Managers
-## Homebrew
-if command -v brew &> /dev/null; then
-    if [[ "$IS_LINUX" == true ]]; then
-        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-        export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
-    elif [[ "$IS_MAC" == true ]]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-        export PATH="/opt/homebrew/bin:$PATH"
-    fi
-else
-    echo "Homebrew not found. Install from: https://brew.sh"
-fi
-
+# Other Package Managers
 ## PNPM
 export PNPM_HOME=""
 case ":$PATH:" in

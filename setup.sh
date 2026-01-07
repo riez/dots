@@ -276,8 +276,8 @@ fi
 print_status "Setting up mise as the unified runtime version manager..."
 if command -v mise &> /dev/null; then
     # Configure mise in shell if not already configured
-    if ! grep -q 'eval "$(mise activate zsh)"' "$HOME/.zprofile"; then
-        echo 'eval "$(mise activate zsh)"' >> "$HOME/.zprofile"
+    if ! grep -q 'eval "$($HOME/.local/bin/mise activate zsh)"' "$HOME/.zprofile"; then
+        echo 'eval "$($HOME/.local/bin/mise activate zsh)"' >> "$HOME/.zprofile"
     fi
     
     # Create mise config directory with proper permissions

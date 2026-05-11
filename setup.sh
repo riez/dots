@@ -21,6 +21,155 @@ print_error() {
     echo -e "${RED}==> ERROR: ${1}${NC}"
 }
 
+backup_path() {
+    local path="$1"
+
+    if [ -e "$path" ] || [ -L "$path" ]; then
+        local backup
+        backup="${path}.backup.$(date +%Y%m%d%H%M%S)"
+        print_warning "Backing up existing $path to $backup"
+        mv "$path" "$backup"
+    fi
+}
+
+link_path() {
+    local source="$1"
+    local target="$2"
+
+    if [ ! -e "$source" ] && [ ! -L "$source" ]; then
+        print_warning "Skipping missing source: $source"
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$target")"
+
+    if [ -L "$target" ]; then
+        local current_target
+        current_target="$(readlink "$target")"
+        if [ "$current_target" = "$source" ]; then
+            return 0
+        fi
+        rm "$target"
+    elif [ -e "$target" ]; then
+        backup_path "$target"
+    fi
+
+    ln -s "$source" "$target"
+}
+
+link_markdown_agents() {
+    local source_dir="$1"
+    local target_dir="$2"
+
+    if [ ! -d "$source_dir" ]; then
+        print_warning "Skipping missing agent source directory: $source_dir"
+        return 0
+    fi
+
+    mkdir -p "$target_dir"
+
+    for agent_file in "$source_dir"/*.md; do
+        [ -e "$agent_file" ] || continue
+        [ "$(basename "$agent_file")" = "CLAUDE.md" ] && continue
+        link_path "$agent_file" "$target_dir/$(basename "$agent_file")"
+    done
+}
+
+link_directory_children() {
+    local source_dir="$1"
+    local target_dir="$2"
+
+    if [ ! -d "$source_dir" ]; then
+        print_warning "Skipping missing source directory: $source_dir"
+        return 0
+    fi
+
+    mkdir -p "$target_dir"
+
+    for source_path in "$source_dir"/*; do
+        [ -e "$source_path" ] || [ -L "$source_path" ] || continue
+        link_path "$source_path" "$target_dir/$(basename "$source_path")"
+    done
+}
+
+setup_claude_code_agents() {
+    local agentic_home="$HOME/.config/agentic"
+
+    print_status "Setting up Claude Code agent links..."
+    mkdir -p "$HOME/.claude/agents" "$HOME/.claude/commands" "$HOME/.claude/skills"
+
+    link_markdown_agents "$agentic_home/droids" "$HOME/.claude/agents"
+    link_path "$agentic_home/teams" "$HOME/.claude/teams"
+
+    if [ -f "$agentic_home/superpowers/commands/orchestrator.md" ]; then
+        link_path "$agentic_home/superpowers/commands/orchestrator.md" "$HOME/.claude/commands/orchestrator.md"
+    fi
+}
+
+setup_codex_agents() {
+    local agentic_home="$HOME/.config/agentic"
+
+    print_status "Setting up Codex agent links..."
+    mkdir -p "$HOME/.codex/skills"
+
+    link_path "$agentic_home/conventions" "$HOME/.codex/conventions"
+    link_directory_children "$agentic_home/skills" "$HOME/.codex/skills"
+}
+
+setup_droid_agents() {
+    local agentic_home="$HOME/.config/agentic"
+
+    print_status "Setting up Droid agent links..."
+    mkdir -p "$HOME/.factory/commands" "$HOME/.factory/hooks"
+
+    link_path "$agentic_home/droids" "$HOME/.factory/droids"
+    link_path "$agentic_home/skills" "$HOME/.factory/skills"
+    link_path "$agentic_home/superpowers" "$HOME/.factory/superpowers"
+    link_path "$agentic_home/conventions" "$HOME/.factory/conventions"
+    link_path "$agentic_home/teams" "$HOME/.factory/teams"
+
+    for command_file in brainstorm.md execute-plan.md write-plan.md; do
+        link_path "$HOME/.factory/superpowers/commands/$command_file" "$HOME/.factory/commands/$command_file"
+    done
+
+    for hook_file in \
+        coderabbit-review.py \
+        post-execute-coderabbit.sh \
+        post-tool-use-coderabbit.sh \
+        pre-execute-coderabbit.sh \
+        sonarqube-analysis.py \
+        sync-hooks.sh; do
+        link_path "$agentic_home/hooks/$hook_file" "$HOME/.factory/hooks/$hook_file"
+    done
+}
+
+setup_opencode_agents() {
+    local agentic_home="$HOME/.config/agentic"
+
+    print_status "Setting up OpenCode agent links..."
+    mkdir -p "$HOME/.config/opencode"
+
+    link_path "$agentic_home/opencode/bin" "$HOME/.config/opencode/bin"
+    link_path "$agentic_home/opencode/opencode.json" "$HOME/.config/opencode/opencode.json"
+    link_path "$agentic_home/conventions" "$HOME/.config/opencode/conventions"
+    link_path "$agentic_home/skills" "$HOME/.config/opencode/skills"
+    link_path "$agentic_home/superpowers" "$HOME/.config/opencode/superpowers"
+}
+
+setup_agent_configs() {
+    print_status "Setting up shared agent configuration..."
+
+    mkdir -p "$HOME/.config/agentic"
+
+    setup_claude_code_agents
+    setup_codex_agents
+    setup_droid_agents
+    setup_opencode_agents
+
+    print_warning "Agent MCP servers may require local secrets that are not committed."
+    print_warning "Set the needed environment variables before first use, for example: CLI_PROXY_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, FIGMA_API_KEY, GREPTILE_API_KEY, CONTEXT7_API_KEY, REF_API_KEY, SONARQUBE_URL, and SONARQUBE_TOKEN."
+}
+
 # Check for required dependencies
 print_status "Checking for required dependencies..."
 MISSING_DEPS=false
@@ -94,6 +243,7 @@ print_status "Creating directories..."
 mkdir -p "$HOME/.config/zsh"
 mkdir -p "$HOME/bin"
 mkdir -p "$HOME/.kube"
+mkdir -p "$HOME/.config/agentic"
 
 # Install base packages
 print_status "Installing base packages..."
@@ -855,6 +1005,9 @@ if [ -f "$HOME/.zshrc" ]; then
         echo 'fi' >> "$HOME/.zshrc"
     fi
 fi
+
+# Link shared agent configuration into each supported agent CLI.
+setup_agent_configs
 
 # Final setup
 print_status "Performing final setup..."

@@ -2,6 +2,7 @@
 !.zshrc
 !.aws/
 !.config/
+!.config/**
 !setup.sh
 !opts/
 !.gitignore

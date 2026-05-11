@@ -22,7 +22,7 @@ if grep -qEi "(Microsoft|WSL)" /proc/version &> /dev/null; then
     export LINES=$(tput lines)
 fi
 
-[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(code --locate-shell-integration-path zsh)"
+[[ "$TERM_PROGRAM" == "vscode" ]] && . "$(/usr/local/bin/code --locate-shell-integration-path zsh)"
 
 
 # Oh My Zsh Configuration
@@ -76,7 +76,7 @@ fi
 
 # Terminal Settings
 [ "$TERM" = "xterm-kitty" ] && alias ssh="kitty +kitten ssh"
-ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=246'
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=250'
 
 # # WSL-specific settings
 # if [[ "$IS_WSL" == true ]]; then
@@ -360,6 +360,11 @@ fi
 
 # Custom Aliases
 alias vi="nvim"
+alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+# Force `code` to VSCode (Homebrew's just-every/code "coder" CLI shadows it)
+alias code='/usr/local/bin/code'
+# Keep the Coder CLI accessible as `coder`
+[[ -x "/opt/homebrew/bin/code" ]] && alias coder='/opt/homebrew/bin/code'
 
 # Docker-dependent aliases - only define if Docker is available
 # if command -v docker &> /dev/null; then
@@ -415,3 +420,13 @@ autoload -Uz compinit
 compinit
 # End of Docker CLI completions
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"
+
+alias claude-mem='bun "/Users/rz/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
+
+# Suppress recursive command_not_found_handler (mise + plugin interaction)
+if typeset -f command_not_found_handler >/dev/null; then
+    command_not_found_handler() {
+        print -u2 "zsh: command not found: $1"
+        return 127
+    }
+fi

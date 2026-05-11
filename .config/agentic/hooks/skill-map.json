@@ -1,0 +1,50 @@
+{
+  "$schema": "Defines which language skills must be invoked before editing files of each type.",
+  "$doc": "Single source of truth. Used by: require-skill.py (Claude Code + Factory), require-skill-opencode.js (OpenCode), and sync-hooks.sh (prompt generation).",
+
+  "extensions": {
+    ".go":      { "skills": ["go-expert"],                         "label": "Go" },
+    ".py":      { "skills": ["python-expert"],                     "label": "Python" },
+    ".rs":      { "skills": ["rust-learner"],                      "label": "Rust" },
+    ".dart":    { "skills": ["flutter-architecture"],              "label": "Flutter/Dart" },
+    ".svelte":  { "skills": ["svelte-code-writer"],                "label": "Svelte" },
+    ".sql":     { "skills": ["supabase-postgres-best-practices"],  "label": "SQL/Postgres" }
+  },
+
+  "typescript_extensions": [".ts", ".tsx", ".js", ".jsx"],
+  "typescript_config": {
+    "skills": ["typescript-expert"],
+    "label": "TypeScript/JavaScript"
+  },
+
+  "filename_patterns": {
+    "\\+page\\.(server\\.)?ts$":  { "skills": ["sveltekit-data-flow"],       "label": "SvelteKit Data Flow" },
+    "\\+layout\\.(server\\.)?ts$": { "skills": ["sveltekit-data-flow"],      "label": "SvelteKit Data Flow" },
+    "\\.svelte\\.(ts|js)$":       { "skills": ["svelte-code-writer"],        "label": "Svelte Module" },
+    "_test\\.dart$":              { "skills": ["flutter-testing"],            "label": "Flutter Testing" },
+    "Cargo\\.toml$":              { "skills": ["rust-learner"],              "label": "Rust (Cargo)" },
+    "payload\\.config\\.ts$":     { "skills": ["payload-cms"],               "label": "Payload CMS" },
+    "tamagui\\.config\\.ts$":     { "skills": ["tamagui-best-practices"],    "label": "Tamagui" }
+  },
+
+  "security_skill": "security-expert",
+  "security_extensions": [
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".rb",
+    ".php", ".java", ".kt", ".swift", ".c", ".cpp", ".cs",
+    ".svelte", ".vue", ".dart"
+  ],
+
+  "skip_extensions": [
+    ".md", ".mdx", ".txt", ".json", ".yaml", ".yml", ".toml",
+    ".xml", ".html", ".css", ".scss", ".less", ".svg", ".png",
+    ".jpg", ".jpeg", ".gif", ".ico", ".env", ".gitignore",
+    ".lock", ".log", ".csv", ".ini", ".cfg"
+  ],
+
+  "bypass_patterns": [
+    "skip\\s+skill",
+    "no\\s+skill\\s+(needed|required|check)",
+    "skill\\s+already\\s+(loaded|invoked|applied)",
+    "skip\\s+language\\s+check"
+  ]
+}

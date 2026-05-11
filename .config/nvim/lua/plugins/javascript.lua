@@ -19,18 +19,18 @@ return {
       },
       setup = {
         tsserver = function()
-          require("lazyvim.util").lsp.on_attach(function(client, buffnr)
-            require('lsp-format').on_attach(client, buffnr)
+          Snacks.util.lsp.on({ name = "tsserver" }, function(buffer, client)
+            require('lsp-format').on_attach(client, buffer)
           end)
         end,
         svelte = function()
-          require("lazyvim.util").lsp.on_attach(function(client, buffnr)
-            require('lsp-format').on_attach(client, buffnr)
+          Snacks.util.lsp.on({ name = "svelte" }, function(buffer, client)
+            require('lsp-format').on_attach(client, buffer)
           end)
         end,
         tailwindcss = function()
-          require("lazyvim.util").lsp.on_attach(function(client, buffnr)
-            require('lsp-format').on_attach(client, buffnr)
+          Snacks.util.lsp.on({ name = "tailwindcss" }, function(buffer, client)
+            require('lsp-format').on_attach(client, buffer)
           end)
         end
       },

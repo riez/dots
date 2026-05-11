@@ -35,15 +35,15 @@ return {
   { "sainnhe/gruvbox-material" },
   { "sainnhe/everforest" },
 
-  -- Configure LazyVim to load gruvbox
+  -- Configure LazyVim to load kanagawa
   {
     "LazyVim/LazyVim",
-    config = function()
-      vim.cmd("colorscheme kanagawa")
+    opts = {
+      colorscheme = "kanagawa",
+    },
+    config = function(_, opts)
+      require("lazyvim").setup(opts)
       vim.cmd("hi Normal guibg=NONE ctermbg=NONE")
     end,
-    -- opts = {
-    --   colorscheme = "koehler",
-    -- },
   },
 }

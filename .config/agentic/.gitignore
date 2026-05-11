@@ -4,9 +4,9 @@ __pycache__/
 .DS_Store
 node_modules/
 **/node_modules/
-superpowers/.git/
-superpowers/node_modules
+superpowers/
 
 # Local agent runtime config can contain MCP/API tokens. Commit sanitized
 # templates instead of these files.
 opencode/*.json
+!opencode/opencode.sample.json

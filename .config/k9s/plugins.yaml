@@ -1,0 +1,14 @@
+plugins:
+  all-logs:
+    shortCut: Shift-A
+    description: Show all logs
+    scopes:
+    - pods
+    command: kubectl
+    background: false
+    args:
+    - logs
+    - --tail=-1
+    - -n
+    - $NAMESPACE
+    - $NAME

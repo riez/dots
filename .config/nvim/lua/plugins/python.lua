@@ -17,12 +17,10 @@ return {
       },
       setup = {
         pyright = function()
-          require("lazyvim.util").lsp.on_attach(function(client, buffnr)
-            require('lsp-format').on_attach(client, buffnr)
-            if client.name == "pyright" then
-              -- disable hover in favor of jedi-language-server
-              client.server_capabilities.hoverProvider = false
-            end
+          Snacks.util.lsp.on({ name = "pyright" }, function(buffer, client)
+            require('lsp-format').on_attach(client, buffer)
+            -- disable hover in favor of jedi-language-server
+            client.server_capabilities.hoverProvider = false
           end)
         end,
       },

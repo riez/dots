@@ -1,7 +1,7 @@
 return {
   -- Ensure Installed
   {
-    "williamboman/mason.nvim",
+    "mason-org/mason.nvim",
     opts = {
       ensure_installed = {
         -- JS Related
@@ -46,13 +46,13 @@ return {
       },
       setup = {
         lua_ls = function()
-          require("lazyvim.util").lsp.on_attach(function(client, buffnr)
-            require('lsp-format').on_attach(client, buffnr)
+          Snacks.util.lsp.on({ name = "lua_ls" }, function(buffer, client)
+            require('lsp-format').on_attach(client, buffer)
           end)
         end,
         yamlls = function()
-          require("lazyvim.util").lsp.on_attach(function(client, buffnr)
-            require('lsp-format').on_attach(client, buffnr)
+          Snacks.util.lsp.on({ name = "yamlls" }, function(buffer, client)
+            require('lsp-format').on_attach(client, buffer)
           end)
         end,
       },

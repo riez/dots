@@ -170,6 +170,101 @@ confirm_continue_with_missing_secrets() {
     done
 }
 
+linux_package_manager() {
+    if command -v apt-get &> /dev/null; then
+        echo "apt"
+    elif command -v apt &> /dev/null; then
+        echo "apt"
+    elif command -v dnf &> /dev/null; then
+        echo "dnf"
+    elif command -v yum &> /dev/null; then
+        echo "yum"
+    else
+        echo ""
+    fi
+}
+
+linux_install_hint() {
+    local packages="$1"
+    local manager
+    manager="$(linux_package_manager)"
+
+    case "$manager" in
+        apt) echo "sudo apt update && sudo apt install -y $packages" ;;
+        dnf) echo "sudo dnf install -y $packages" ;;
+        yum) echo "sudo yum install -y $packages" ;;
+        *) echo "install package(s): $packages with your system package manager" ;;
+    esac
+}
+
+install_linux_packages() {
+    local apt_packages="$1"
+    local dnf_packages="${2:-$apt_packages}"
+    local yum_packages="${3:-$dnf_packages}"
+    local manager
+    manager="$(linux_package_manager)"
+
+    case "$manager" in
+        apt)
+            local apt_array=()
+            read -r -a apt_array <<< "$apt_packages"
+            sudo apt update
+            sudo apt install -y "${apt_array[@]}"
+            ;;
+        dnf)
+            local dnf_array=()
+            read -r -a dnf_array <<< "$dnf_packages"
+            sudo dnf install -y "${dnf_array[@]}"
+            ;;
+        yum)
+            local yum_array=()
+            read -r -a yum_array <<< "$yum_packages"
+            sudo yum install -y "${yum_array[@]}"
+            ;;
+        *)
+            print_warning "No supported Linux package manager found. Install manually: $apt_packages"
+            return 1
+            ;;
+    esac
+}
+
+install_linux_development_tools() {
+    local manager
+    manager="$(linux_package_manager)"
+
+    case "$manager" in
+        apt)
+            install_linux_packages "build-essential curl file git tmux openssl procps"
+            ;;
+        dnf)
+            sudo dnf groupinstall -y "Development Tools" || true
+            install_linux_packages \
+                "build-essential curl file git tmux openssl procps" \
+                "curl file git tmux openssl procps-ng"
+            ;;
+        yum)
+            sudo yum groupinstall -y "Development Tools" || true
+            install_linux_packages \
+                "build-essential curl file git tmux openssl procps" \
+                "curl file git tmux openssl procps-ng"
+            ;;
+        *)
+            print_error "No supported package manager found"
+            exit 1
+            ;;
+    esac
+}
+
+install_with_brew_or_warn() {
+    local package="$1"
+
+    if command -v brew &> /dev/null; then
+        brew install "$package" || print_warning "Failed to install $package with Homebrew"
+    else
+        print_warning "Homebrew is not available; skipping $package"
+    fi
+}
+
 setup_cliproxyapi() {
     local cliproxyapi_home="${CLIPROXYAPI_HOME:-$HOME/Code/github/router-for-me/CLIProxyAPI}"
     local cliproxyapi_state_dir="${CLIPROXYAPI_STATE_DIR:-$HOME/.cli-proxy-api}"
@@ -525,28 +620,28 @@ MISSING_DEPS=false
 # Check for sudo
 if ! command -v sudo &> /dev/null; then
     print_error "sudo is required but not installed"
-    print_warning "Install with: apt update && apt install -y sudo"
+    print_warning "Install with: $(linux_install_hint sudo)"
     MISSING_DEPS=true
 fi
 
 # Check for curl
 if ! command -v curl &> /dev/null; then
     print_error "curl is required but not installed"
-    print_warning "Install with: sudo apt update && sudo apt install -y curl"
+    print_warning "Install with: $(linux_install_hint curl)"
     MISSING_DEPS=true
 fi
 
 # Check for git
 if ! command -v git &> /dev/null; then
     print_error "git is required but not installed"
-    print_warning "Install with: sudo apt update && sudo apt install -y git"
+    print_warning "Install with: $(linux_install_hint git)"
     MISSING_DEPS=true
 fi
 
 # Check for zsh
 if ! command -v zsh &> /dev/null; then
     print_error "zsh is required but not installed"
-    print_warning "Install with: sudo apt update && sudo apt install -y zsh"
+    print_warning "Install with: $(linux_install_hint zsh)"
     MISSING_DEPS=true
 fi
 
@@ -554,7 +649,7 @@ fi
 if [[ "$(uname)" == "Linux" && -f /proc/version && $(grep -i microsoft /proc/version) ]]; then
     if ! command -v wslvar &> /dev/null || ! command -v wslpath &> /dev/null; then
         print_error "WSL integration tools (wslu) are required but not installed"
-        print_warning "Install with: sudo apt update && sudo apt install -y wslu"
+        print_warning "Install with: $(linux_install_hint wslu)"
         MISSING_DEPS=true
     fi
 fi
@@ -568,16 +663,7 @@ fi
 # Function to check and install packages based on OS
 install_packages() {
     if [[ "$(uname)" == "Linux" ]]; then
-        if command -v apt &> /dev/null; then
-            sudo apt update
-            sudo apt install -y build-essential curl file git tmux openssl procps
-        elif command -v yum &> /dev/null; then
-            sudo yum groupinstall -y 'Development Tools'
-            sudo yum install -y curl file git tmux openssl procps-ng
-        else
-            echo -e "${RED}No supported package manager found${NC}"
-            exit 1
-        fi
+        install_linux_development_tools
     elif [[ "$(uname)" == "Darwin" ]]; then
         if ! command -v xcode-select &> /dev/null; then
             print_status "Installing Command Line Tools for Xcode..."
@@ -601,7 +687,7 @@ install_packages
 if ! command -v brew &> /dev/null; then
     print_status "Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    
+
     # Add Homebrew to PATH based on OS
     if [[ "$(uname)" == "Linux" ]]; then
         BREW_PATH="/home/linuxbrew/.linuxbrew/bin/brew"
@@ -665,18 +751,8 @@ fi
 # Method 2: Try with system package manager
 if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
     print_status "Attempting to install Neovim with system package manager..."
-    
-    # For Ubuntu/Debian systems
-    if command -v apt &> /dev/null; then
-        print_status "Using apt to install Neovim..."
-        sudo apt update
-        sudo apt install -y neovim
-    # For RHEL/CentOS systems
-    elif command -v yum &> /dev/null; then
-        print_status "Using yum to install Neovim..."
-        sudo yum install -y neovim
-    fi
-    
+    install_linux_packages "neovim"
+
     if command -v nvim &> /dev/null; then
         NEOVIM_INSTALLED=true
         print_status "Neovim installed successfully with system package manager!"
@@ -687,7 +763,7 @@ fi
 if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]] && command -v snap &> /dev/null; then
     print_status "Attempting to install Neovim with snap..."
     sudo snap install --classic nvim
-    
+
     if command -v nvim &> /dev/null; then
         NEOVIM_INSTALLED=true
         print_status "Neovim installed successfully with snap!"
@@ -701,7 +777,7 @@ if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
     cd "$HOME/bin"
     curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
     chmod u+x nvim.appimage
-    
+
     # Try to extract AppImage if fuse is not available
     if ! ./nvim.appimage --version &> /dev/null; then
         print_status "Extracting AppImage (fuse may not be available)..."
@@ -714,15 +790,15 @@ if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
         # Create symlink
         ln -sf "$(pwd)/nvim.appimage" "$(pwd)/nvim"
     fi
-    
+
     # Add to PATH if not already there
     if ! grep -q 'export PATH="$HOME/bin:$PATH"' "$HOME/.zprofile"; then
         echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.zprofile"
     fi
-    
+
     # Source immediately for the current session
     export PATH="$HOME/bin:$PATH"
-    
+
     if command -v nvim &> /dev/null || [ -f "$HOME/bin/nvim" ]; then
         NEOVIM_INSTALLED=true
         print_status "Neovim installed successfully using AppImage!"
@@ -732,15 +808,13 @@ fi
 # Method 5: Install from source as a last resort
 if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
     print_status "Attempting to install Neovim from source (this may take a while)..."
-    
+
     # Install build dependencies
-    if command -v apt &> /dev/null; then
-        sudo apt update
-        sudo apt install -y ninja-build gettext libtool libtool-bin autoconf automake cmake g++ pkg-config unzip curl
-    elif command -v yum &> /dev/null; then
-        sudo yum install -y ninja-build libtool autoconf automake cmake gcc gcc-c++ make pkgconfig unzip patch gettext curl
-    fi
-    
+    install_linux_packages \
+        "ninja-build gettext libtool libtool-bin autoconf automake cmake g++ pkg-config unzip curl" \
+        "ninja-build gettext libtool autoconf automake cmake gcc gcc-c++ make pkgconf-pkg-config unzip patch curl" \
+        "ninja-build gettext libtool autoconf automake cmake gcc gcc-c++ make pkgconfig unzip patch curl"
+
     # Clone and build neovim
     cd /tmp
     rm -rf neovim
@@ -749,7 +823,7 @@ if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
     git checkout stable
     make CMAKE_BUILD_TYPE=RelWithDebInfo
     sudo make install
-    
+
     if command -v nvim &> /dev/null; then
         NEOVIM_INSTALLED=true
         print_status "Neovim installed successfully from source!"
@@ -760,7 +834,7 @@ fi
 if command -v nvim &> /dev/null; then
     NVIM_VERSION=$(nvim --version | head -n 1)
     print_status "Neovim is installed: $NVIM_VERSION"
-    
+
     # Create Neovim configuration directory
     print_status "Setting up Neovim configuration directory..."
     mkdir -p "$HOME/.config/nvim"
@@ -777,12 +851,12 @@ if command -v mise &> /dev/null; then
     if ! grep -q 'eval "$($HOME/.local/bin/mise activate zsh)"' "$HOME/.zprofile"; then
         echo 'eval "$($HOME/.local/bin/mise activate zsh)"' >> "$HOME/.zprofile"
     fi
-    
+
     # Create mise config directory with proper permissions
     mkdir -p "$HOME/.config" || sudo mkdir -p "$HOME/.config"
     sudo chown -R $(whoami):$(whoami) "$HOME/.config"
     mkdir -p "$HOME/.config/mise"
-    
+
     # Create base config file if it doesn't exist
     if [ ! -f "$HOME/.config/mise/config.toml" ]; then
         cat > "$HOME/.config/mise/config.toml" << EOF
@@ -809,21 +883,21 @@ EOF
         print_status "Updating Go version in mise config..."
         sed -i 's/go = \[.*\]/go = \["1.24.2"\]/' "$HOME/.config/mise/config.toml"
     fi
-    
+
     # Install runtimes with mise
     print_status "Installing Node.js with mise..."
     mise install node@lts
     mise use --global node@lts
-    
+
     # Explicitly install the specific Go version with mise
     print_status "Installing Go 1.24.2 with mise..."
     mise install go@1.24.2
     mise use --global go@1.24.2
-    
+
     # Install global Node.js tools
     if mise which node &> /dev/null; then
         eval "$(mise activate bash)"
-        
+
         print_status "Installing global Node.js development tools..."
         if command -v npm &> /dev/null; then
             npm install -g npm@latest
@@ -900,8 +974,7 @@ brew install go
 # Install required packages for SDKMAN
 print_status "Installing required packages for SDKMAN..."
 if [[ "$(uname)" == "Linux" ]]; then
-    sudo apt update
-    sudo apt install -y zip unzip
+    install_linux_packages "zip unzip"
 elif [[ "$(uname)" == "Darwin" ]]; then
     brew install zip unzip
 fi
@@ -917,18 +990,17 @@ print_status "Installing gvm for managing multiple Go versions..."
 if [ ! -d "$HOME/.gvm" ]; then
     # Install gvm dependencies
     if [[ "$(uname)" == "Linux" ]]; then
-        sudo apt update
-        sudo apt install -y bison
+        install_linux_packages "bison"
     elif [[ "$(uname)" == "Darwin" ]]; then
         brew install bison
     fi
-    
+
     # Install gvm
     bash < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer)
-    
+
     # Source gvm
     [[ -s "$HOME/.gvm/scripts/gvm" ]] && source "$HOME/.gvm/scripts/gvm"
-    
+
     # Install latest stable Go version
     print_status "Installing stable Go version with gvm..."
     # First install Go 1.4 (bootstrap version)
@@ -951,11 +1023,13 @@ if command -v rustup &> /dev/null; then
     source "$HOME/.cargo/env"
     rustup component add rustfmt clippy rust-analyzer
     cargo install cargo-edit cargo-watch cargo-expand
-    
+
     # Install additional libraries for Rust development
     if [[ "$(uname)" == "Linux" ]]; then
-        sudo apt update
-        sudo apt install -y pkg-config libssl-dev libsqlite3-dev libpq-dev
+        install_linux_packages \
+            "pkg-config libssl-dev libsqlite3-dev libpq-dev" \
+            "pkgconf-pkg-config openssl-devel sqlite-devel libpq-devel" \
+            "pkgconfig openssl-devel sqlite-devel postgresql-devel"
     elif [[ "$(uname)" == "Darwin" ]]; then
         brew install openssl@3 sqlite postgresql
     fi
@@ -964,13 +1038,13 @@ fi
 # Install Electron development requirements
 print_status "Installing Electron development dependencies..."
 if [[ "$(uname)" == "Linux" ]]; then
-    sudo apt update
-    # Use available packages for Ubuntu Noble (24.04)
-    sudo apt install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxss-dev \
-                       libnss3-dev libasound2-dev libxtst-dev
-    
+    install_linux_packages \
+        "libgtk-3-dev libwebkit2gtk-4.1-dev libxss-dev libnss3-dev libasound2-dev libxtst-dev" \
+        "gtk3-devel webkit2gtk4.1-devel libXScrnSaver-devel nss-devel alsa-lib-devel libXtst-devel" \
+        "gtk3-devel webkit2gtk3-devel libXScrnSaver-devel nss-devel alsa-lib-devel libXtst-devel"
+
     # Install Wine for Windows builds (optional)
-    sudo apt install -y wine64
+    install_linux_packages "wine64" "wine" "wine" || true
 elif [[ "$(uname)" == "Darwin" ]]; then
     brew install wine
 fi
@@ -978,14 +1052,19 @@ fi
 # Install React Native development requirements
 print_status "Installing React Native development dependencies..."
 if [[ "$(uname)" == "Linux" ]]; then
-    sudo apt update
-    sudo apt install -y lib32z1 lib32stdc++6 adb
-    
+    install_linux_packages \
+        "lib32z1 lib32stdc++6 adb" \
+        "zlib.i686 libstdc++.i686 android-tools" \
+        "zlib.i686 libstdc++.i686 android-tools"
+
     # Install JDK for Android development
     if ! command -v java &> /dev/null; then
-        sudo apt install -y openjdk-17-jdk
+        install_linux_packages \
+            "openjdk-17-jdk" \
+            "java-17-openjdk-devel" \
+            "java-17-openjdk-devel"
     fi
-    
+
     # Setup Android SDK path
     mkdir -p "$HOME/Android/Sdk"
     if ! grep -q 'export ANDROID_HOME="$HOME/Android/Sdk"' "$HOME/.zprofile"; then
@@ -1024,8 +1103,10 @@ brew install \
 print_status "Installing Flutter..."
 if [[ "$(uname)" == "Linux" ]]; then
     # First check and install Flutter dependencies
-    sudo apt update
-    sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+    install_linux_packages \
+        "clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev" \
+        "clang cmake ninja-build pkgconf-pkg-config gtk3-devel xz-devel libstdc++-devel" \
+        "clang cmake ninja-build pkgconfig gtk3-devel xz-devel libstdc++-devel"
 
     # For Linux/WSL2, use the recommended approach
     if [ ! -d "$HOME/development/flutter" ]; then
@@ -1047,7 +1128,7 @@ if [[ "$(uname)" == "Linux" ]]; then
             bin/flutter config --no-analytics
             bin/flutter config --enable-web
         fi
-        
+
         cd "$HOME"
         print_status "Flutter SDK installed to $HOME/development/flutter"
     else
@@ -1058,75 +1139,97 @@ elif [[ "$(uname)" == "Darwin" ]]; then
     brew install --cask flutter
 fi
 
-# Install database development tools (modified for Ubuntu 24.04)
+# Install database development tools
 print_status "Installing database development tools..."
 if [[ "$(uname)" == "Linux" ]]; then
-    sudo apt update
-    
+    LINUX_PM="$(linux_package_manager)"
+
     # PostgreSQL
     print_status "Installing PostgreSQL..."
-    sudo apt install -y postgresql postgresql-contrib
-    
+    install_linux_packages \
+        "postgresql postgresql-contrib" \
+        "postgresql-server postgresql-contrib" \
+        "postgresql-server postgresql-contrib"
+
     # MySQL
     print_status "Installing MySQL..."
-    sudo apt install -y mysql-server
-    
+    install_linux_packages "mysql-server"
+
     # Redis
     print_status "Installing Redis..."
-    sudo apt install -y redis-server
-    
-    # MongoDB installation for Ubuntu (completely rewritten to fix repository issues)
-    print_status "Setting up MongoDB..."
-    
-    # First, remove any existing MongoDB repository files
-    print_status "Removing any existing MongoDB repository configurations..."
-    sudo rm -f /etc/apt/sources.list.d/mongodb*.list
-    
-    # Also check and remove any references in the main sources.list
-    if grep -q "mongodb" /etc/apt/sources.list; then
-        print_status "Removing MongoDB references from main sources.list..."
-        sudo sed -i '/mongodb/d' /etc/apt/sources.list
+    install_linux_packages "redis-server" "redis" "redis"
+
+    if [ "$LINUX_PM" = "apt" ]; then
+        # MongoDB installation for Ubuntu (completely rewritten to fix repository issues)
+        print_status "Setting up MongoDB..."
+
+        # First, remove any existing MongoDB repository files
+        print_status "Removing any existing MongoDB repository configurations..."
+        sudo rm -f /etc/apt/sources.list.d/mongodb*.list
+
+        # Also check and remove any references in the main sources.list
+        if [ -f /etc/apt/sources.list ] && grep -q "mongodb" /etc/apt/sources.list; then
+            print_status "Removing MongoDB references from main sources.list..."
+            sudo sed -i '/mongodb/d' /etc/apt/sources.list
+        fi
+
+        # Update package lists after removing old repositories
+        sudo apt update
+
+        # Create a fresh temporary directory for MongoDB setup
+        MONGO_TEMP_DIR=$(mktemp -d)
+        cd "$MONGO_TEMP_DIR"
+
+        # Install MongoDB 6.0 using the jammy repository
+        print_status "Adding MongoDB 6.0 GPG key..."
+        curl -fsSL https://pgp.mongodb.com/server-6.0.asc | \
+            sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg \
+            --dearmor
+
+        print_status "Adding MongoDB 6.0 repository for jammy..."
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | \
+            sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+
+        # Ensure package lists are updated from the new repository
+        print_status "Updating package lists with new MongoDB repository..."
+        sudo apt update
+
+        # Install MongoDB packages
+        print_status "Installing MongoDB 6.0..."
+        sudo apt install -y mongodb-org
+
+        # Clean up
+        cd "$HOME"
+        rm -rf "$MONGO_TEMP_DIR"
+    else
+        print_warning "Skipping MongoDB server package setup on $LINUX_PM. Install MongoDB manually or use a container if needed."
     fi
-    
-    # Update package lists after removing old repositories
-    sudo apt update
-    
-    # Create a fresh temporary directory for MongoDB setup
-    MONGO_TEMP_DIR=$(mktemp -d)
-    cd "$MONGO_TEMP_DIR"
-    
-    # Install MongoDB 6.0 using the jammy repository
-    print_status "Adding MongoDB 6.0 GPG key..."
-    curl -fsSL https://pgp.mongodb.com/server-6.0.asc | \
-        sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg \
-        --dearmor
-    
-    print_status "Adding MongoDB 6.0 repository for jammy..."
-    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | \
-        sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
-    
-    # Ensure package lists are updated from the new repository
-    print_status "Updating package lists with new MongoDB repository..."
-    sudo apt update
-    
-    # Install MongoDB packages
-    print_status "Installing MongoDB 6.0..."
-    sudo apt install -y mongodb-org
-    
-    # Clean up
-    cd "$HOME"
-    rm -rf "$MONGO_TEMP_DIR"
-    
+
     # Don't try to start services in WSL as they may not work with systemd
     if [[ -f /proc/version && ! $(grep -i microsoft /proc/version) ]]; then
-        sudo systemctl enable postgresql
-        sudo systemctl start postgresql
-        sudo systemctl enable mysql
-        sudo systemctl start mysql
-        sudo systemctl enable redis-server
-        sudo systemctl start redis-server
-        sudo systemctl enable mongod
-        sudo systemctl start mongod
+        if [ "$LINUX_PM" = "apt" ]; then
+            POSTGRES_SERVICE="postgresql"
+            MYSQL_SERVICE="mysql"
+            REDIS_SERVICE="redis-server"
+        else
+            POSTGRES_SERVICE="postgresql"
+            MYSQL_SERVICE="mysqld"
+            REDIS_SERVICE="redis"
+            if command -v postgresql-setup &> /dev/null; then
+                sudo postgresql-setup --initdb || true
+            fi
+        fi
+
+        sudo systemctl enable "$POSTGRES_SERVICE" || true
+        sudo systemctl start "$POSTGRES_SERVICE" || true
+        sudo systemctl enable "$MYSQL_SERVICE" || true
+        sudo systemctl start "$MYSQL_SERVICE" || true
+        sudo systemctl enable "$REDIS_SERVICE" || true
+        sudo systemctl start "$REDIS_SERVICE" || true
+        if [ "$LINUX_PM" = "apt" ]; then
+            sudo systemctl enable mongod || true
+            sudo systemctl start mongod || true
+        fi
     else
         print_warning "Running in WSL environment. Database services will need to be started manually:"
         print_warning "  PostgreSQL: sudo service postgresql start"
@@ -1171,26 +1274,25 @@ if [[ "$(uname)" == "Linux" ]]; then
     unzip -q awscliv2.zip
     sudo ./aws/install
     rm -rf aws awscliv2.zip
-    
+
     # Install AWS SAM CLI
     print_status "Installing AWS SAM CLI..."
     # Install prerequisites
-    sudo apt update
-    sudo apt install -y python3-pip
+    install_linux_packages "python3-pip"
     pip3 install aws-sam-cli
-    
+
     # Install AWS CDK
     print_status "Installing AWS CDK..."
     if command -v npm &> /dev/null; then
         npm install -g aws-cdk
     fi
-    
+
     # Install AWS Amplify CLI
     print_status "Installing AWS Amplify CLI..."
     if command -v npm &> /dev/null; then
         npm install -g @aws-amplify/cli
     fi
-    
+
     # Install additional AWS tools
     print_status "Installing additional AWS development tools..."
     pip3 install boto3 awscli-local
@@ -1199,13 +1301,13 @@ elif [[ "$(uname)" == "Darwin" ]]; then
     # Install AWS tools via Homebrew
     brew install awscli
     brew install aws-sam-cli
-    
+
     # Install AWS CDK and Amplify via npm
     if command -v npm &> /dev/null; then
         npm install -g aws-cdk
         npm install -g @aws-amplify/cli
     fi
-    
+
     # Install additional AWS tools
     pip3 install boto3 awscli-local
 fi
@@ -1216,24 +1318,32 @@ mkdir -p "$HOME/.aws"
 # Install Google Cloud SDK
 print_status "Installing Google Cloud SDK..."
 if [[ "$(uname)" == "Linux" ]]; then
-    # Install dependencies
-    sudo apt update
-    sudo apt install -y apt-transport-https ca-certificates gnupg curl
-    
-    # Add Google Cloud SDK distribution URI as a package source
-    print_status "Adding Google Cloud SDK repository..."
-    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-    
-    # Import Google Cloud public key
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-    
-    # Update and install the SDK
-    sudo apt update
-    sudo apt install -y google-cloud-sdk google-cloud-sdk-app-engine-python google-cloud-sdk-app-engine-python-extras google-cloud-sdk-datastore-emulator google-cloud-sdk-pubsub-emulator
-    
-    # Install Firebase emulator dependencies
-    sudo apt install -y openjdk-17-jdk
-    
+    if [ "$(linux_package_manager)" = "apt" ]; then
+        # Install dependencies
+        install_linux_packages "apt-transport-https ca-certificates gnupg curl"
+
+        # Add Google Cloud SDK distribution URI as a package source
+        print_status "Adding Google Cloud SDK repository..."
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+
+        # Import Google Cloud public key
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+
+        # Update and install the SDK
+        sudo apt update
+        sudo apt install -y google-cloud-sdk google-cloud-sdk-app-engine-python google-cloud-sdk-app-engine-python-extras google-cloud-sdk-datastore-emulator google-cloud-sdk-pubsub-emulator
+
+        # Install Firebase emulator dependencies
+        install_linux_packages "openjdk-17-jdk"
+    else
+        print_warning "Google Cloud apt repositories are Debian/Ubuntu-specific; using Homebrew fallback."
+        install_with_brew_or_warn google-cloud-sdk
+        install_linux_packages \
+            "openjdk-17-jdk" \
+            "java-17-openjdk-devel" \
+            "java-17-openjdk-devel"
+    fi
+
 elif [[ "$(uname)" == "Darwin" ]]; then
     # Install Google Cloud SDK via Homebrew
     brew install --cask google-cloud-sdk
@@ -1255,54 +1365,68 @@ fi
 # Install Azure CLI and development tools
 print_status "Installing Azure CLI and development tools..."
 if [[ "$(uname)" == "Linux" ]]; then
-    # Install dependencies
-    sudo apt update
-    sudo apt install -y ca-certificates curl apt-transport-https lsb-release gnupg
-    
-    # Download and install the Microsoft signing key
-    print_status "Adding Microsoft repository..."
-    curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
-    
-    # Add the Azure CLI software repository
-    AZ_REPO=$(lsb_release -cs)
-    if [[ "$AZ_REPO" == "noble" ]]; then
-        # Use jammy repo for noble (24.04) until dedicated repo is available
-        AZ_REPO="jammy"
+    if [ "$(linux_package_manager)" = "apt" ]; then
+        # Install dependencies
+        install_linux_packages "ca-certificates curl apt-transport-https lsb-release gnupg"
+
+        # Download and install the Microsoft signing key
+        print_status "Adding Microsoft repository..."
+        curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
+
+        # Add the Azure CLI software repository
+        AZ_REPO=$(lsb_release -cs)
+        if [[ "$AZ_REPO" == "noble" ]]; then
+            # Use jammy repo for noble (24.04) until dedicated repo is available
+            AZ_REPO="jammy"
+        fi
+        echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
+
+        # Update repository and install Azure CLI
+        sudo apt update
+        sudo apt install -y azure-cli
+
+        # Install Azure Functions Core Tools
+        print_status "Installing Azure Functions Core Tools..."
+        curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+        sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg
+        sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-$(lsb_release -cs)-prod $(lsb_release -cs) main" > /etc/apt/sources.list.d/dotnetdev.list'
+        sudo apt update
+        sudo apt install -y azure-functions-core-tools-4
+    else
+        print_warning "Azure apt repositories are Debian/Ubuntu-specific; using Homebrew fallback."
+        install_with_brew_or_warn azure-cli
+        if command -v brew &> /dev/null; then
+            brew tap azure/functions || true
+            brew install azure-functions-core-tools@4 || brew install azure-functions-core-tools || print_warning "Failed to install Azure Functions Core Tools with Homebrew"
+        else
+            print_warning "Homebrew is not available; skipping Azure Functions Core Tools"
+        fi
     fi
-    echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
-    
-    # Update repository and install Azure CLI
-    sudo apt update
-    sudo apt install -y azure-cli
-    
-    # Install Azure Functions Core Tools
-    print_status "Installing Azure Functions Core Tools..."
-    curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
-    sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg
-    sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-$(lsb_release -cs)-prod $(lsb_release -cs) main" > /etc/apt/sources.list.d/dotnetdev.list'
-    sudo apt update
-    sudo apt install -y azure-functions-core-tools-4
-    
+
     # Install Azure Dev CLI
     print_status "Installing Azure Dev CLI..."
-    curl -fsSL https://aka.ms/install-azd.sh | bash
-    
+    if [ "$(linux_package_manager)" = "apt" ]; then
+        curl -fsSL https://aka.ms/install-azd.sh | bash
+    else
+        install_with_brew_or_warn azure/azd/azd
+    fi
+
     # Install Azure Static Web Apps CLI
     if command -v npm &> /dev/null; then
         npm install -g @azure/static-web-apps-cli
     fi
-    
+
 elif [[ "$(uname)" == "Darwin" ]]; then
     # Install Azure CLI via Homebrew
     brew install azure-cli
-    
+
     # Install Azure Functions Core Tools
     brew tap azure/functions
     brew install azure-functions-core-tools@4
-    
+
     # Install Azure Dev CLI
     brew install azure/azd/azd
-    
+
     # Install Azure Static Web Apps CLI
     if command -v npm &> /dev/null; then
         npm install -g @azure/static-web-apps-cli
@@ -1368,7 +1492,7 @@ fi
 # WSL2-specific optimizations
 if [[ "$(uname)" == "Linux" && -f /proc/version && $(grep -i microsoft /proc/version) ]]; then
     print_status "Applying WSL2-specific optimizations..."
-    
+
     # Check if Windows integration is working properly
     if ! WINDOWS_HOME=$(wslpath "$(wslvar USERPROFILE)" 2>/dev/null); then
         print_warning "Cannot access Windows home directory. WSL integration might not be properly set up."
@@ -1389,7 +1513,7 @@ if [[ "$(uname)" == "Linux" && -f /proc/version && $(grep -i microsoft /proc/ver
             WINDOWS_HOME="$HOME"
         fi
     fi
-    
+
     # Create .wslconfig in Windows home if it doesn't exist
     if [ ! -f "$WINDOWS_HOME/.wslconfig" ]; then
         print_status "Creating .wslconfig for better WSL2 performance..."
@@ -1401,7 +1525,7 @@ localhostForwarding=true
 kernelCommandLine=net.ifnames=0
 EOF
     fi
-    
+
     # Add WSL-specific settings to .zprofile if not already present
     if ! grep -q "# WSL2-specific settings" "$HOME/.zprofile"; then
         cat >> "$HOME/.zprofile" << EOF
@@ -1417,19 +1541,19 @@ EOF
 
     # Check for common WSL2 issues
     print_status "Checking for common WSL2 issues..."
-    
+
     # Check if Windows Firewall might be blocking connections
     if ! curl -s https://api.github.com > /dev/null; then
         print_warning "Network connectivity issues detected. Windows Firewall might be blocking WSL2 connections."
         print_warning "You may need to add a Windows Firewall rule to allow WSL2 traffic."
     fi
-    
+
     # Check for Windows path in PATH variable
     if echo $PATH | grep -q "/mnt/c/Windows"; then
         print_warning "Windows paths detected in your PATH. This can cause slowdowns and compatibility issues."
         print_warning "Consider removing Windows paths from your PATH variable in Linux environment."
     fi
-    
+
     # Check disk space on WSL2 virtual disk
     DISK_SPACE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
     if [ "$DISK_SPACE" -gt 80 ]; then
@@ -1491,19 +1615,19 @@ fi
 if verify_tool aws; then
     AWS_VERSION=$(aws --version)
     print_status "AWS CLI version: $AWS_VERSION"
-    
+
     # Check AWS CDK
     if verify_tool cdk; then
         CDK_VERSION=$(cdk --version)
         print_status "AWS CDK version: $CDK_VERSION"
     fi
-    
+
     # Check AWS SAM CLI
     if verify_tool sam; then
         SAM_VERSION=$(sam --version)
         print_status "AWS SAM CLI version: $SAM_VERSION"
     fi
-    
+
     # Check AWS Amplify CLI
     if verify_tool amplify; then
         AMPLIFY_VERSION=$(amplify --version)
@@ -1525,13 +1649,13 @@ fi
 if verify_tool az; then
     AZ_VERSION=$(az --version | grep "azure-cli" | head -n 1)
     print_status "Azure CLI: $AZ_VERSION"
-    
+
     # Check Azure Functions Core Tools
     if verify_tool func; then
         FUNC_VERSION=$(func --version)
         print_status "Azure Functions Core Tools version: $FUNC_VERSION"
     fi
-    
+
     # Check Azure Developer CLI
     if verify_tool azd; then
         AZD_VERSION=$(azd version)

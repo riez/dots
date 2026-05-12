@@ -316,6 +316,20 @@ npm_install_global_packages() {
     npm install -g "${packages_to_install[@]}"
 }
 
+ensure_local_bin_path() {
+    mkdir -p "$HOME/.local/bin"
+
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
+
+    touch "$HOME/.zprofile"
+    if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.zprofile"; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zprofile"
+    fi
+}
+
 python_module_installed() {
     local module="$1"
 
@@ -335,6 +349,9 @@ PY
 install_python_cli_package() {
     local package="$1"
     local command_name="${2:-$package}"
+    local brew_package="${3:-$package}"
+
+    ensure_local_bin_path
 
     if has_command "$command_name"; then
         print_status "$command_name already installed; skipping."
@@ -342,11 +359,26 @@ install_python_cli_package() {
     fi
 
     if has_command pipx; then
-        pipx install "$package" || print_warning "Failed to install $package with pipx"
-        return 0
+        pipx install "$package" || pipx upgrade "$package" || print_warning "Failed to install $package with pipx"
+        ensure_local_bin_path
+
+        if has_command "$command_name"; then
+            return 0
+        fi
+
+        print_warning "$package was installed with pipx, but $command_name is still not on PATH."
+    else
+        print_warning "pipx is not available; trying Homebrew for Python CLI package $package"
     fi
 
-    print_warning "pipx is not available; skipping Python CLI package $package"
+    if has_command brew; then
+        brew_install_packages "$brew_package" || print_warning "Failed to install $brew_package with Homebrew"
+        if has_command "$command_name"; then
+            return 0
+        fi
+    fi
+
+    print_warning "Could not install $command_name. You may need to install $package manually."
 }
 
 install_python_library_package() {
@@ -1351,6 +1383,8 @@ setup_agent_configs() {
 
 load_setup_env
 
+ensure_local_bin_path
+
 # Check for required dependencies
 print_status "Checking for required dependencies..."
 MISSING_DEPS=false
@@ -2045,7 +2079,7 @@ if [[ "$(uname)" == "Linux" ]]; then
         print_status "Installing AWS SAM CLI..."
         # Install prerequisites
         install_linux_packages "python3-pip pipx" "python3-pip pipx" "python3-pip python3-pipx"
-        install_python_cli_package aws-sam-cli sam
+        install_python_cli_package aws-sam-cli sam aws-sam-cli
     fi
 
     # Install AWS CDK
@@ -2067,7 +2101,7 @@ if [[ "$(uname)" == "Linux" ]]; then
     # Install additional AWS tools
     print_status "Installing additional AWS development tools..."
     install_python_library_package boto3 boto3
-    install_python_cli_package awscli-local awslocal
+    install_python_cli_package awscli-local awslocal awscli-local
 
 elif [[ "$(uname)" == "Darwin" ]]; then
     # Install AWS tools via Homebrew
@@ -2080,7 +2114,7 @@ elif [[ "$(uname)" == "Darwin" ]]; then
 
     # Install additional AWS tools
     install_python_library_package boto3 boto3
-    install_python_cli_package awscli-local awslocal
+    install_python_cli_package awscli-local awslocal awscli-local
 fi
 
 # Create AWS config directory

@@ -316,6 +316,97 @@ npm_install_global_packages() {
     npm install -g "${packages_to_install[@]}"
 }
 
+python_module_installed() {
+    local module="$1"
+
+    python3 -c "import ${module}" &> /dev/null
+}
+
+python_externally_managed() {
+    python3 <<'PY' &> /dev/null
+import os
+import sysconfig
+
+stdlib = sysconfig.get_path("stdlib")
+raise SystemExit(0 if stdlib and os.path.exists(os.path.join(stdlib, "EXTERNALLY-MANAGED")) else 1)
+PY
+}
+
+install_python_cli_package() {
+    local package="$1"
+    local command_name="${2:-$package}"
+
+    if has_command "$command_name"; then
+        print_status "$command_name already installed; skipping."
+        return 0
+    fi
+
+    if has_command pipx; then
+        pipx install "$package" || print_warning "Failed to install $package with pipx"
+        return 0
+    fi
+
+    print_warning "pipx is not available; skipping Python CLI package $package"
+}
+
+install_python_library_package() {
+    local package="$1"
+    local module="${2:-$package}"
+
+    if python_module_installed "$module"; then
+        print_status "$package already available for python3; skipping."
+        return 0
+    fi
+
+    if python_externally_managed; then
+        print_warning "Skipping global $package install because python3 is externally managed."
+        print_warning "Install $package inside a project virtualenv when needed."
+        return 0
+    fi
+
+    if ! has_command pip3; then
+        print_warning "pip3 is not available; skipping Python library $package"
+        return 0
+    fi
+
+    if pip3 install --user "$package"; then
+        return 0
+    fi
+
+    print_warning "Could not install Python library $package into this Python environment."
+    print_warning "Install it inside a project virtualenv when needed."
+}
+
+systemd_unit_exists() {
+    local service_name="$1"
+
+    systemctl list-unit-files "${service_name}.service" --no-legend 2>/dev/null | grep -q "^${service_name}.service"
+}
+
+first_existing_systemd_unit() {
+    local service_name
+
+    for service_name in "$@"; do
+        if systemd_unit_exists "$service_name"; then
+            echo "$service_name"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+enable_start_system_service() {
+    local service_name="$1"
+
+    if [ -z "$service_name" ]; then
+        return 0
+    fi
+
+    sudo systemctl enable "$service_name" || print_warning "Could not enable $service_name service."
+    sudo systemctl start "$service_name" || print_warning "Could not start $service_name service."
+}
+
 backup_path() {
     local path="$1"
 
@@ -1891,23 +1982,19 @@ if [[ "$(uname)" == "Linux" ]]; then
             MYSQL_SERVICE="mysql"
             REDIS_SERVICE="redis-server"
         else
-            POSTGRES_SERVICE="postgresql"
-            MYSQL_SERVICE="mysqld"
-            REDIS_SERVICE="redis"
+            POSTGRES_SERVICE="$(first_existing_systemd_unit postgresql)"
+            MYSQL_SERVICE="$(first_existing_systemd_unit mysqld mariadb mysql)"
+            REDIS_SERVICE="$(first_existing_systemd_unit redis valkey)"
             if command -v postgresql-setup &> /dev/null; then
                 sudo postgresql-setup --initdb || true
             fi
         fi
 
-        sudo systemctl enable "$POSTGRES_SERVICE" || true
-        sudo systemctl start "$POSTGRES_SERVICE" || true
-        sudo systemctl enable "$MYSQL_SERVICE" || true
-        sudo systemctl start "$MYSQL_SERVICE" || true
-        sudo systemctl enable "$REDIS_SERVICE" || true
-        sudo systemctl start "$REDIS_SERVICE" || true
+        enable_start_system_service "$POSTGRES_SERVICE"
+        enable_start_system_service "$MYSQL_SERVICE"
+        enable_start_system_service "$REDIS_SERVICE"
         if [ "$LINUX_PM" = "apt" ]; then
-            sudo systemctl enable mongod || true
-            sudo systemctl start mongod || true
+            enable_start_system_service mongod
         fi
     else
         print_warning "Running in WSL environment. Database services will need to be started manually:"
@@ -1933,7 +2020,7 @@ fi
 # Install Firebase tools
 print_status "Installing Firebase tools and development environment..."
 if command -v npm &> /dev/null; then
-    npm_install_global_packages firebase-tools @firebase/cli
+    npm_install_global_packages firebase-tools
 
     # Initialize Firebase
     print_status "Setting up Firebase configuration directory..."
@@ -1957,8 +2044,8 @@ if [[ "$(uname)" == "Linux" ]]; then
     if should_run_install_step "AWS SAM CLI" has_command sam; then
         print_status "Installing AWS SAM CLI..."
         # Install prerequisites
-        install_linux_packages "python3-pip"
-        pip3 install aws-sam-cli
+        install_linux_packages "python3-pip pipx" "python3-pip pipx" "python3-pip python3-pipx"
+        install_python_cli_package aws-sam-cli sam
     fi
 
     # Install AWS CDK
@@ -1979,7 +2066,8 @@ if [[ "$(uname)" == "Linux" ]]; then
 
     # Install additional AWS tools
     print_status "Installing additional AWS development tools..."
-    pip3 install boto3 awscli-local
+    install_python_library_package boto3 boto3
+    install_python_cli_package awscli-local awslocal
 
 elif [[ "$(uname)" == "Darwin" ]]; then
     # Install AWS tools via Homebrew
@@ -1991,7 +2079,8 @@ elif [[ "$(uname)" == "Darwin" ]]; then
     fi
 
     # Install additional AWS tools
-    pip3 install boto3 awscli-local
+    install_python_library_package boto3 boto3
+    install_python_cli_package awscli-local awslocal
 fi
 
 # Create AWS config directory

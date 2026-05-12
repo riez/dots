@@ -429,14 +429,122 @@ setup_claude_code_agents() {
     local agentic_home="$HOME/.config/agentic"
 
     print_status "Setting up Claude Code agent links..."
-    mkdir -p "$HOME/.claude/agents" "$HOME/.claude/commands" "$HOME/.claude/skills"
+    mkdir -p "$HOME/.claude/agents" "$HOME/.claude/commands" "$HOME/.claude/hooks" "$HOME/.claude/skills"
 
     link_markdown_agents "$agentic_home/droids" "$HOME/.claude/agents"
     link_path "$agentic_home/teams" "$HOME/.claude/teams"
+    link_directory_children "$agentic_home/skills" "$HOME/.claude/skills"
 
     if [ -f "$agentic_home/superpowers/commands/orchestrator.md" ]; then
         link_path "$agentic_home/superpowers/commands/orchestrator.md" "$HOME/.claude/commands/orchestrator.md"
     fi
+
+    for hook_file in \
+        post-tool-use.py \
+        pre-compact.py \
+        require-exploration.py \
+        require-planning.py \
+        require-root-cause.py \
+        require-skill.py \
+        session-start.py \
+        stop.py; do
+        link_path "$agentic_home/hooks/$hook_file" "$HOME/.claude/hooks/$hook_file"
+    done
+
+    link_path "$agentic_home/hooks/CLAUDE.md" "$HOME/.claude/hooks/CLAUDE.md"
+    link_path "$agentic_home/claude/statusline.sh" "$HOME/.claude/statusline.sh"
+
+    configure_claude_code_settings
+}
+
+configure_claude_code_settings() {
+    print_status "Configuring Claude Code hooks..."
+    mkdir -p "$HOME/.claude"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        print_warning "python3 is required to configure Claude Code settings; hook files were linked but settings.json was not updated."
+        return 0
+    fi
+
+    CLAUDE_SETTINGS_PATH="$HOME/.claude/settings.json" python3 <<'PY'
+import json
+import os
+from pathlib import Path
+
+settings_path = Path(os.environ["CLAUDE_SETTINGS_PATH"])
+try:
+    data = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+except Exception:
+    backup = settings_path.with_suffix(settings_path.suffix + ".invalid")
+    settings_path.rename(backup)
+    data = {}
+
+if not isinstance(data, dict):
+    data = {}
+
+env = data.setdefault("env", {})
+env.setdefault("DISABLE_AUTOUPDATER", "1")
+env.setdefault("MAX_THINKING_TOKENS", "63999")
+env.setdefault("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1")
+
+hooks = data.setdefault("hooks", {})
+
+def command_exists(event_name, command):
+    for entry in hooks.get(event_name, []):
+        for hook in entry.get("hooks", []):
+            if hook.get("command") == command:
+                return True
+    return False
+
+def add_hook(event_name, matcher, command, timeout=None):
+    if command_exists(event_name, command):
+        return
+    hook = {"type": "command", "command": command}
+    if timeout is not None:
+        hook["timeout"] = timeout
+    entry = {"hooks": [hook]}
+    if matcher is not None:
+        entry["matcher"] = matcher
+    hooks.setdefault(event_name, []).append(entry)
+
+for command in [
+    "~/.claude/hooks/require-exploration.py",
+    "~/.claude/hooks/require-planning.py",
+    "~/.claude/hooks/require-root-cause.py",
+    "~/.claude/hooks/require-skill.py",
+]:
+    add_hook("PreToolUse", "Edit|Write|MultiEdit", command, 5000)
+
+add_hook(
+    "PreToolUse",
+    "Bash",
+    "python3 ~/.config/agentic/hooks/coderabbit-review.py pre-commit",
+    10000,
+)
+add_hook(
+    "PostToolUse",
+    "Edit|Write|MultiEdit",
+    "python3 ~/.config/agentic/hooks/coderabbit-review.py post-edit",
+    10000,
+)
+add_hook(
+    "PostToolUse",
+    "Bash",
+    "python3 ~/.config/agentic/hooks/coderabbit-review.py mark-done",
+    10000,
+)
+add_hook("PostToolUse", "*", "~/.claude/hooks/post-tool-use.py", 5000)
+add_hook("SessionStart", None, "~/.claude/hooks/session-start.py", 5000)
+add_hook("PreCompact", None, "~/.claude/hooks/pre-compact.py", 5000)
+add_hook("Stop", None, "~/.claude/hooks/stop.py", 5000)
+
+data.setdefault("statusLine", {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+})
+
+settings_path.write_text(json.dumps(data, indent=2) + "\n")
+PY
 }
 
 setup_codex_agents() {
@@ -470,10 +578,92 @@ setup_droid_agents() {
         post-execute-coderabbit.sh \
         post-tool-use-coderabbit.sh \
         pre-execute-coderabbit.sh \
+        post-tool-use.py \
+        pre-compact.py \
+        require-exploration.py \
+        require-planning.py \
+        require-root-cause.py \
+        require-skill.py \
+        session-start.py \
         sonarqube-analysis.py \
+        stop.py \
         sync-hooks.sh; do
         link_path "$agentic_home/hooks/$hook_file" "$HOME/.factory/hooks/$hook_file"
     done
+
+    if [ -x "$HOME/.factory/hooks/sync-hooks.sh" ]; then
+        "$HOME/.factory/hooks/sync-hooks.sh" || print_warning "Factory hook sync reported warnings; review ~/.factory/settings.json if hooks are not active."
+    fi
+
+    configure_droid_settings
+}
+
+configure_droid_settings() {
+    print_status "Configuring Droid hooks..."
+    mkdir -p "$HOME/.factory"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        print_warning "python3 is required to configure Droid settings; hook files were linked but settings.json was not updated."
+        return 0
+    fi
+
+    DROID_SETTINGS_PATH="$HOME/.factory/settings.json" python3 <<'PY'
+import json
+import os
+from pathlib import Path
+
+settings_path = Path(os.environ["DROID_SETTINGS_PATH"])
+try:
+    data = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+except Exception:
+    backup = settings_path.with_suffix(settings_path.suffix + ".invalid")
+    settings_path.rename(backup)
+    data = {}
+
+if not isinstance(data, dict):
+    data = {}
+
+data.setdefault("enableCustomDroids", True)
+hooks = data.setdefault("hooks", {})
+
+def command_exists(event_name, command):
+    for entry in hooks.get(event_name, []):
+        for hook in entry.get("hooks", []):
+            if hook.get("command") == command:
+                return True
+    return False
+
+def add_hook(event_name, matcher, command, timeout=None):
+    if command_exists(event_name, command):
+        return
+    hook = {"type": "command", "command": command}
+    if timeout is not None:
+        hook["timeout"] = timeout
+    entry = {"hooks": [hook]}
+    if matcher is not None:
+        entry["matcher"] = matcher
+    hooks.setdefault(event_name, []).append(entry)
+
+add_hook("SessionStart", "*", "sh ~/.factory/superpowers/hooks/session-start.sh", 5)
+add_hook("SessionStart", "*", "python3 ~/.factory/hooks/session-start.py", 5)
+
+for command in [
+    "sh ~/.factory/hooks/require-exploration.sh",
+    "sh ~/.factory/hooks/require-planning.sh",
+    "sh ~/.factory/hooks/require-root-cause.sh",
+    "sh ~/.factory/hooks/require-skill.sh",
+]:
+    add_hook("PreToolUse", "Write|Edit|MultiEdit", command, 5)
+
+add_hook("PreToolUse", "Bash", "sh ~/.factory/hooks/pre-execute-coderabbit.sh", 10)
+add_hook("PostToolUse", "Write|Edit|MultiEdit", "sh ~/.factory/hooks/post-tool-use-coderabbit.sh", 10)
+add_hook("PostToolUse", "Bash", "sh ~/.factory/hooks/post-execute-coderabbit.sh", 10)
+add_hook("PostToolUse", "*", "python3 ~/.factory/hooks/post-tool-use.py", 5)
+add_hook("PreCompact", "*", "python3 ~/.factory/hooks/pre-compact.py", 5)
+add_hook("Stop", None, "python3 ~/.factory/hooks/stop.py", 5)
+
+settings_path.write_text(json.dumps(data, indent=2) + "\n")
+PY
 }
 
 ensure_agentic_superpowers() {
@@ -576,15 +766,24 @@ setup_opencode_agents() {
     local agentic_home="$HOME/.config/agentic"
 
     print_status "Setting up OpenCode agent links..."
-    mkdir -p "$HOME/.config/opencode"
+    mkdir -p "$HOME/.config/opencode/plugin"
 
     setup_opencode_local_config "$agentic_home"
 
     link_path "$agentic_home/opencode/bin" "$HOME/.config/opencode/bin"
     link_path "$agentic_home/opencode/opencode.json" "$HOME/.config/opencode/opencode.json"
+    link_path "$agentic_home/opencode/package.json" "$HOME/.config/opencode/package.json"
     link_path "$agentic_home/conventions" "$HOME/.config/opencode/conventions"
     link_path "$agentic_home/skills" "$HOME/.config/opencode/skills"
     link_path "$agentic_home/superpowers" "$HOME/.config/opencode/superpowers"
+
+    link_path "$agentic_home/hooks/coderabbit-review-opencode.js" "$HOME/.config/opencode/plugin/coderabbit-review.js"
+    link_path "$agentic_home/hooks/require-skill-opencode.js" "$HOME/.config/opencode/plugin/require-skill.js"
+    link_path "$agentic_home/hooks/sonarqube-opencode.js" "$HOME/.config/opencode/plugin/sonarqube-analysis.js"
+
+    if [ -f "$agentic_home/superpowers/.opencode/plugin/superpowers.js" ]; then
+        link_path "$agentic_home/superpowers/.opencode/plugin/superpowers.js" "$HOME/.config/opencode/plugin/superpowers.js"
+    fi
 }
 
 setup_agent_configs() {

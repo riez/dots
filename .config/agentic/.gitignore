@@ -10,3 +10,4 @@ superpowers/
 # templates instead of these files.
 opencode/*.json
 !opencode/opencode.sample.json
+!opencode/package.json

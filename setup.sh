@@ -855,6 +855,8 @@ setup_cliproxyapi() {
 
     ensure_zprofile_export "CLI_PROXY_API_KEY" "$cliproxyapi_key"
     ensure_zprofile_export "CLI_PROXY_BASE_URL" "$cliproxyapi_base_url"
+    export CLI_PROXY_API_KEY="$cliproxyapi_key"
+    export CLI_PROXY_BASE_URL="$cliproxyapi_base_url"
 
     if [ ! -f "$cliproxyapi_config_path" ]; then
         print_status "Writing sanitized CLIProxyAPI config to $cliproxyapi_config_path"
@@ -1168,32 +1170,361 @@ setup_droid_agents() {
 }
 
 configure_droid_settings() {
-    print_status "Configuring Droid hooks..."
+    print_status "Configuring Droid settings..."
     mkdir -p "$HOME/.factory"
 
     if ! command -v python3 >/dev/null 2>&1; then
-        print_warning "python3 is required to configure Droid settings; hook files were linked but settings.json was not updated."
+        print_warning "python3 is required to configure Droid settings; hook files were linked but settings.json and mcp.json were not updated."
         return 0
     fi
 
-    DROID_SETTINGS_PATH="$HOME/.factory/settings.json" python3 <<'PY'
+    DROID_SETTINGS_PATH="$HOME/.factory/settings.json" \
+    DROID_MCP_PATH="$HOME/.factory/mcp.json" \
+    DROID_HOME="$HOME" \
+    python3 <<'PY'
 import json
 import os
+import shutil
 from pathlib import Path
 
+home = os.environ["DROID_HOME"]
 settings_path = Path(os.environ["DROID_SETTINGS_PATH"])
+mcp_path = Path(os.environ["DROID_MCP_PATH"])
+
+def load_json(path, default):
+    try:
+        data = json.loads(path.read_text()) if path.exists() else default
+    except Exception:
+        backup = path.with_suffix(path.suffix + ".invalid")
+        path.rename(backup)
+        data = default
+    return data if isinstance(data, type(default)) else default
+
+def write_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+def env(name, default=""):
+    return os.environ.get(name, default)
+
+def executable(command):
+    if "/" in command:
+        return Path(command).expanduser().exists()
+    return shutil.which(command) is not None
+
+def merged_mapping(existing, desired):
+    merged = dict(existing) if isinstance(existing, dict) else {}
+    for key, value in desired.items():
+        if value not in ("", None):
+            merged[key] = value
+    return merged
+
+def has_existing_mcp_secret(env_name, server):
+    headers = server.get("headers", {}) if isinstance(server.get("headers"), dict) else {}
+    server_env = server.get("env", {}) if isinstance(server.get("env"), dict) else {}
+    environment = server.get("environment", {}) if isinstance(server.get("environment"), dict) else {}
+
+    if env_name == "REF_API_KEY":
+        return bool(headers.get("x-ref-api-key"))
+    if env_name == "CONTEXT7_API_KEY":
+        return bool(headers.get("CONTEXT7_API_KEY"))
+    if env_name == "GREPTILE_API_KEY":
+        return bool(headers.get("Authorization"))
+    if env_name == "SONARQUBE_TOKEN":
+        return bool(server_env.get("SONARQUBE_TOKEN") or environment.get("SONARQUBE_TOKEN"))
+    return False
+
+def merge_server(existing, desired):
+    existing = existing if isinstance(existing, dict) else {}
+    desired = dict(desired)
+    required_env = desired.pop("_required_env", [])
+    required_commands = desired.pop("_required_commands", [])
+    headers = merged_mapping(existing.get("headers", {}), desired.get("headers", {}))
+    server_env = merged_mapping(existing.get("env", {}), desired.get("env", {}))
+    environment = merged_mapping(existing.get("environment", {}), desired.get("environment", {}))
+
+    server = dict(existing)
+    server.update(desired)
+    if headers:
+        server["headers"] = headers
+    if server_env:
+        server["env"] = server_env
+    if environment:
+        server["environment"] = environment
+
+    missing_secret = any(not env(name) and not has_existing_mcp_secret(name, server) for name in required_env)
+    missing_command = any(not executable(command) for command in required_commands)
+    if missing_secret or missing_command:
+        server["disabled"] = True
+    else:
+        server.setdefault("disabled", False)
+    return server
+
+def merge_mcp_servers(data):
+    mcp_servers = data.setdefault("mcpServers", {})
+    pal_binary = env(
+        "PAL_MCP_BINARY",
+        f"{home}/Code/github/BeehiveInnovations/pal-mcp-server/pal-mcp-server",
+    )
+    crawl4ai_endpoint = env("CRAWL4AI_MCP_ENDPOINT", "https://crawl4ai-local.taila7050b.ts.net")
+    sonarqube_url = env("SONARQUBE_URL", "https://sonarqube-local.taila7050b.ts.net")
+
+    desired = {
+        "notebooklm": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["notebooklm-mcp@latest"],
+            "_required_commands": ["npx"],
+        },
+        "ref": {
+            "type": "http",
+            "url": "https://api.ref.tools/mcp",
+            "headers": {"x-ref-api-key": env("REF_API_KEY")},
+            "_required_env": ["REF_API_KEY"],
+        },
+        "context7": {
+            "type": "http",
+            "url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": env("CONTEXT7_API_KEY")},
+            "_required_env": ["CONTEXT7_API_KEY"],
+        },
+        "pal": {
+            "type": "stdio",
+            "command": pal_binary,
+            "args": [],
+            "_required_commands": [pal_binary],
+        },
+        "greptile": {
+            "type": "http",
+            "url": "https://api.greptile.com/mcp",
+            "headers": {"Authorization": f"Bearer {env('GREPTILE_API_KEY')}"} if env("GREPTILE_API_KEY") else {},
+            "_required_env": ["GREPTILE_API_KEY"],
+        },
+        "playwright": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@playwright/mcp@latest"],
+            "_required_commands": ["npx"],
+        },
+        "chrome-devtools": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "chrome-devtools-mcp@latest"],
+            "_required_commands": ["npx"],
+        },
+        "next-devtools": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "next-devtools-mcp@0.2.0"],
+            "_required_commands": ["npx"],
+        },
+        "svelte-mcp": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@sveltejs/mcp@latest"],
+            "_required_commands": ["npx"],
+        },
+        "figma": {
+            "type": "http",
+            "url": "https://mcp.figma.com/mcp",
+        },
+        "auggie": {
+            "type": "stdio",
+            "command": "auggie",
+            "args": ["--mcp"],
+            "_required_commands": ["auggie"],
+        },
+        "sonarqube": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "sonarqube-mcp-server@latest"],
+            "env": {
+                "SONARQUBE_URL": sonarqube_url,
+                "SONARQUBE_TOKEN": env("SONARQUBE_TOKEN"),
+            },
+            "_required_env": ["SONARQUBE_TOKEN"],
+            "_required_commands": ["npx"],
+        },
+        "crawl4ai": {
+            "type": "stdio",
+            "command": "npx",
+            "args": [
+                "-y",
+                "-p",
+                "crawl4ai-mcp-sse-stdio",
+                "crawl4ai-mcp",
+                "--stdio",
+                "--endpoint",
+                crawl4ai_endpoint,
+            ],
+            "_required_commands": ["npx"],
+        },
+    }
+
+    if shutil.which("codex"):
+        desired["codex"] = {
+            "type": "stdio",
+            "command": shutil.which("codex"),
+            "args": ["-m", "gpt-5.5", "-c", "model_reasoning_effort=high", "mcp-server"],
+        }
+
+    pencil_binary = "/Applications/Pencil.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64"
+    if Path(pencil_binary).exists():
+        desired["pencil"] = {
+            "type": "stdio",
+            "command": pencil_binary,
+            "args": ["--app", "desktop"],
+        }
+
+    for name, server in desired.items():
+        mcp_servers[name] = merge_server(mcp_servers.get(name, {}), server)
+
+    return data
+
+def cli_proxy_custom_models():
+    api_key = env("CLI_PROXY_API_KEY")
+    base_url = env("CLI_PROXY_BASE_URL", "http://127.0.0.1:8317").rstrip("/")
+    openai_base_url = f"{base_url}/v1"
+
+    return [
+        {
+            "model": "claude-sonnet-4-6(max)",
+            "id": "custom:Sonnet-4.6-0",
+            "index": 0,
+            "baseUrl": base_url,
+            "displayName": "Sonnet 4.6 Max (Anthropic)",
+            "apiKey": api_key,
+            "extraArgs": {
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": "max"},
+            },
+            "noImageSupport": False,
+            "provider": "anthropic",
+        },
+        {
+            "model": "gpt-5.5-fast(medium)",
+            "id": "custom:GPT5.5-Fast-Medium-1",
+            "index": 1,
+            "baseUrl": openai_base_url,
+            "displayName": "GPT5.5 Fast Medium",
+            "apiKey": api_key,
+            "noImageSupport": False,
+            "provider": "openai",
+        },
+        {
+            "model": "gpt-5.5-fast(high)",
+            "id": "custom:GPT5.5-Fast-High-2",
+            "index": 2,
+            "baseUrl": openai_base_url,
+            "displayName": "GPT5.5 Fast High",
+            "apiKey": api_key,
+            "noImageSupport": False,
+            "provider": "openai",
+        },
+        {
+            "model": "gpt-5.5(medium)",
+            "id": "custom:GPT5.5-Medium-3",
+            "index": 3,
+            "baseUrl": openai_base_url,
+            "displayName": "GPT5.5 Medium",
+            "apiKey": api_key,
+            "noImageSupport": False,
+            "provider": "openai",
+        },
+        {
+            "model": "gpt-5.5(high)",
+            "id": "custom:GPT5.5-High-4",
+            "index": 4,
+            "baseUrl": openai_base_url,
+            "displayName": "GPT5.5 High",
+            "apiKey": api_key,
+            "noImageSupport": False,
+            "provider": "openai",
+        },
+        {
+            "model": "claude-opus-4-7(max)",
+            "id": "custom:Opus-4.7-5",
+            "index": 5,
+            "baseUrl": base_url,
+            "displayName": "Opus 4.7 Max (Anthropic)",
+            "apiKey": api_key,
+            "extraArgs": {
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": "max"},
+            },
+            "noImageSupport": False,
+            "provider": "anthropic",
+        },
+        {
+            "model": "gpt-5.3-codex(medium)",
+            "id": "custom:GPT5.3-Codex-Medium-6",
+            "index": 6,
+            "baseUrl": openai_base_url,
+            "displayName": "GPT5.3-Codex Medium",
+            "apiKey": api_key,
+            "noImageSupport": False,
+            "provider": "openai",
+        },
+        {
+            "model": "gpt-5.3-codex(high)",
+            "id": "custom:GPT5.3-Codex-High-7",
+            "index": 7,
+            "baseUrl": openai_base_url,
+            "displayName": "GPT5.3-Codex High",
+            "apiKey": api_key,
+            "noImageSupport": False,
+            "provider": "openai",
+        },
+    ]
+
+def merge_custom_models(data):
+    existing_models = data.get("customModels", [])
+    if not isinstance(existing_models, list):
+        existing_models = []
+
+    by_id = {
+        model.get("id"): model
+        for model in existing_models
+        if isinstance(model, dict) and model.get("id")
+    }
+
+    for desired in cli_proxy_custom_models():
+        current = by_id.get(desired["id"], {})
+        if not desired.get("apiKey") and current.get("apiKey"):
+            desired.pop("apiKey", None)
+        current.update(desired)
+        by_id[desired["id"]] = current
+
+    desired_ids = [model["id"] for model in cli_proxy_custom_models()]
+    ordered = [by_id[model_id] for model_id in desired_ids]
+    ordered.extend(
+        model
+        for model in existing_models
+        if isinstance(model, dict) and model.get("id") not in desired_ids
+    )
+    data["customModels"] = ordered
+
 try:
-    data = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+    settings = load_json(settings_path, {})
+    mcp = load_json(mcp_path, {})
 except Exception:
-    backup = settings_path.with_suffix(settings_path.suffix + ".invalid")
-    settings_path.rename(backup)
-    data = {}
+    settings = {}
+    mcp = {}
 
-if not isinstance(data, dict):
-    data = {}
+settings.setdefault("enableCustomDroids", True)
+settings.setdefault("sessionDefaultSettings", {})
+settings["sessionDefaultSettings"].setdefault("autonomyMode", "auto-high")
+settings["sessionDefaultSettings"].setdefault("interactionMode", "auto")
+settings["sessionDefaultSettings"].setdefault("autonomyLevel", "high")
+settings["sessionDefaultSettings"]["model"] = "custom:GPT5.5-Fast-High-2"
+settings["sessionDefaultSettings"]["specModeModel"] = "custom:GPT5.5-Fast-High-2"
+merge_custom_models(settings)
 
-data.setdefault("enableCustomDroids", True)
-hooks = data.setdefault("hooks", {})
+hooks = settings.setdefault("hooks", {})
 
 def command_exists(event_name, command):
     for entry in hooks.get(event_name, []):
@@ -1231,7 +1562,8 @@ add_hook("PostToolUse", "*", "python3 ~/.factory/hooks/post-tool-use.py", 5)
 add_hook("PreCompact", "*", "python3 ~/.factory/hooks/pre-compact.py", 5)
 add_hook("Stop", None, "python3 ~/.factory/hooks/stop.py", 5)
 
-settings_path.write_text(json.dumps(data, indent=2) + "\n")
+write_json(settings_path, settings)
+write_json(mcp_path, merge_mcp_servers(mcp))
 PY
 }
 
@@ -1362,7 +1694,7 @@ setup_agent_configs() {
 
     # Override with SETUP_REQUIRED_SECRETS="NAME_ONE NAME_TWO" when a machine
     # needs additional MCP/provider secrets before agent setup should proceed.
-    local required_secrets_string="${SETUP_REQUIRED_SECRETS:-CLI_PROXY_API_KEY FIGMA_API_KEY GREPTILE_API_KEY SONARQUBE_TOKEN}"
+    local required_secrets_string="${SETUP_REQUIRED_SECRETS:-CLI_PROXY_API_KEY FIGMA_API_KEY GREPTILE_API_KEY CONTEXT7_API_KEY REF_API_KEY SONARQUBE_TOKEN}"
     local required_secrets=()
     read -r -a required_secrets <<< "$required_secrets_string"
     confirm_continue_with_missing_secrets \

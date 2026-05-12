@@ -360,7 +360,9 @@ fi
 
 # Custom Aliases
 alias vi="nvim"
-alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+if [[ -x "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]]; then
+    alias tailscale="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+fi
 # Force `code` to VSCode (Homebrew's just-every/code "coder" CLI shadows it)
 alias code='/usr/local/bin/code'
 # Keep the Coder CLI accessible as `coder`
@@ -430,3 +432,5 @@ if typeset -f command_not_found_handler >/dev/null; then
         return 127
     }
 fi
+
+[[ -s "/home/rz/.gvm/scripts/gvm" ]] && source "/home/rz/.gvm/scripts/gvm"

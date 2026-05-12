@@ -5,6 +5,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Function to print status
 print_status() {
@@ -19,6 +20,300 @@ print_warning() {
 # Function to print error
 print_error() {
     echo -e "${RED}==> ERROR: ${1}${NC}"
+}
+
+has_command() {
+    command -v "$1" &> /dev/null
+}
+
+has_path() {
+    [ -e "$1" ] || [ -L "$1" ]
+}
+
+has_dir() {
+    [ -d "$1" ]
+}
+
+has_file() {
+    [ -f "$1" ]
+}
+
+brew_package_installed() {
+    local package="$1"
+
+    if ! has_command brew; then
+        return 1
+    fi
+
+    brew list --formula "$package" &> /dev/null || brew list --cask "$package" &> /dev/null
+}
+
+linux_package_installed() {
+    local package="$1"
+    local manager
+    manager="$(linux_package_manager)"
+
+    case "$manager" in
+        apt)
+            dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"
+            ;;
+        dnf|yum)
+            rpm -q "$package" &> /dev/null
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+SETUP_INSTALL_MODE="${SETUP_INSTALL_MODE:-prompt}"
+SETUP_OVERRIDE_INSTALLED=false
+SETUP_SKIP_INSTALLED=false
+DNF_MIRROR_PREPARED=false
+
+load_setup_env() {
+    local env_file="${SETUP_ENV_FILE:-}"
+    local had_allexport=false
+    local status=0
+
+    if [ -z "$env_file" ]; then
+        if [ -f "$SCRIPT_DIR/.env" ]; then
+            env_file="$SCRIPT_DIR/.env"
+        elif [ -f "$PWD/.env" ]; then
+            env_file="$PWD/.env"
+        fi
+    fi
+
+    if [ -z "$env_file" ]; then
+        return 0
+    fi
+
+    if [ ! -f "$env_file" ]; then
+        print_warning "SETUP_ENV_FILE points to missing file: $env_file"
+        return 0
+    fi
+
+    print_status "Loading environment variables from $env_file"
+
+    case "$-" in
+        *a*) had_allexport=true ;;
+    esac
+
+    set -a
+    # .env must be shell-compatible: KEY=value or export KEY=value.
+    # shellcheck disable=SC1090
+    . "$env_file"
+    status=$?
+
+    if [ "$had_allexport" != true ]; then
+        set +a
+    fi
+
+    if [ "$status" -ne 0 ]; then
+        print_error "Failed to load $env_file. Ensure it uses shell-compatible KEY=value syntax."
+        exit 1
+    fi
+}
+
+report_installation_item() {
+    local label="$1"
+    shift
+
+    if "$@"; then
+        print_status "$label: installed"
+        return 0
+    fi
+
+    print_warning "$label: not installed"
+    return 1
+}
+
+check_current_installation() {
+    local detected=false
+
+    print_status "Checking current installation..."
+
+    report_installation_item "Homebrew" has_command brew && detected=true
+    report_installation_item "Oh My Zsh" has_dir "$HOME/.oh-my-zsh" && detected=true
+    report_installation_item "Antigen" has_file "$HOME/.config/zsh/antigen.zsh" && detected=true
+    report_installation_item "Powerlevel10k" has_dir "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k" && detected=true
+    report_installation_item "mise" has_command mise && detected=true
+    report_installation_item "Neovim" has_command nvim && detected=true
+    report_installation_item "SDKMAN" has_dir "$HOME/.sdkman" && detected=true
+    report_installation_item "gvm" has_dir "$HOME/.gvm" && detected=true
+    report_installation_item "Rust" has_command rustc && detected=true
+    report_installation_item "Flutter" has_path "$HOME/development/flutter" && detected=true
+    report_installation_item "agent configuration" has_dir "$HOME/.config/agentic" && detected=true
+
+    [ "$detected" = true ]
+}
+
+select_install_mode() {
+    local detected_existing=false
+
+    if check_current_installation; then
+        detected_existing=true
+    fi
+
+    case "$SETUP_INSTALL_MODE" in
+        override|Override|OVERRIDE|reinstall|Reinstall|REINSTALL)
+            SETUP_OVERRIDE_INSTALLED=true
+            print_status "Install mode: override already installed steps."
+            return 0
+            ;;
+        skip|Skip|SKIP)
+            SETUP_SKIP_INSTALLED=true
+            print_status "Install mode: skip already installed steps."
+            return 0
+            ;;
+        prompt|Prompt|PROMPT|"")
+            ;;
+        *)
+            print_warning "Unknown SETUP_INSTALL_MODE=$SETUP_INSTALL_MODE; using prompt mode."
+            ;;
+    esac
+
+    if [ "$detected_existing" = false ]; then
+        SETUP_OVERRIDE_INSTALLED=true
+        print_status "No existing installation detected; running all setup steps."
+        return 0
+    fi
+
+    if [ ! -t 0 ]; then
+        SETUP_SKIP_INSTALLED=true
+        print_warning "Existing installation detected and setup is not interactive; skipping already installed steps."
+        print_warning "Set SETUP_INSTALL_MODE=override to rerun installed steps non-interactively."
+        return 0
+    fi
+
+    local answer
+    while true; do
+        printf "Existing setup found. Override/reinstall installed steps or skip them? [o]verride/[s]kip: "
+        read -r answer
+        case "$answer" in
+            o|O|override|Override|OVERRIDE|reinstall|Reinstall|REINSTALL)
+                SETUP_OVERRIDE_INSTALLED=true
+                print_status "Install mode: override already installed steps."
+                return 0
+                ;;
+            s|S|skip|Skip|SKIP|"")
+                SETUP_SKIP_INSTALLED=true
+                print_status "Install mode: skip already installed steps."
+                return 0
+                ;;
+            *)
+                print_warning "Please enter o to override or s to skip."
+                ;;
+        esac
+    done
+}
+
+should_run_install_step() {
+    local label="$1"
+    shift
+
+    if [ "$#" -eq 0 ]; then
+        return 0
+    fi
+
+    if ! "$@"; then
+        return 0
+    fi
+
+    if [ "$SETUP_OVERRIDE_INSTALLED" = true ]; then
+        print_status "$label already installed; overriding because install mode is override."
+        return 0
+    fi
+
+    print_status "$label already installed; skipping."
+    return 1
+}
+
+brew_install_packages() {
+    local package
+    local packages_to_install=()
+
+    if ! has_command brew; then
+        print_warning "Homebrew is not available; skipping packages: $*"
+        return 1
+    fi
+
+    for package in "$@"; do
+        if [ "$SETUP_SKIP_INSTALLED" = true ] && brew_package_installed "$package"; then
+            print_status "$package already installed with Homebrew; skipping."
+            continue
+        fi
+        packages_to_install+=("$package")
+    done
+
+    if [ "${#packages_to_install[@]}" -eq 0 ]; then
+        return 0
+    fi
+
+    brew install "${packages_to_install[@]}"
+}
+
+brew_install_casks() {
+    local cask
+    local casks_to_install=()
+
+    if ! has_command brew; then
+        print_warning "Homebrew is not available; skipping casks: $*"
+        return 1
+    fi
+
+    for cask in "$@"; do
+        if [ "$SETUP_SKIP_INSTALLED" = true ] && brew_package_installed "$cask"; then
+            print_status "$cask already installed with Homebrew; skipping."
+            continue
+        fi
+        casks_to_install+=("$cask")
+    done
+
+    if [ "${#casks_to_install[@]}" -eq 0 ]; then
+        return 0
+    fi
+
+    brew install --cask "${casks_to_install[@]}"
+}
+
+npm_global_package_installed() {
+    local package="$1"
+    local package_name="$package"
+
+    if ! has_command npm; then
+        return 1
+    fi
+
+    if [[ "$package_name" != @* && "$package_name" == *@* ]]; then
+        package_name="${package_name%@*}"
+    fi
+
+    npm list -g --depth=0 "$package_name" &> /dev/null
+}
+
+npm_install_global_packages() {
+    local package
+    local packages_to_install=()
+
+    if ! has_command npm; then
+        print_warning "npm is not available; skipping global packages: $*"
+        return 1
+    fi
+
+    for package in "$@"; do
+        if [ "$SETUP_SKIP_INSTALLED" = true ] && npm_global_package_installed "$package"; then
+            print_status "$package already installed globally with npm; skipping."
+            continue
+        fi
+        packages_to_install+=("$package")
+    done
+
+    if [ "${#packages_to_install[@]}" -eq 0 ]; then
+        return 0
+    fi
+
+    npm install -g "${packages_to_install[@]}"
 }
 
 backup_path() {
@@ -191,10 +486,110 @@ linux_install_hint() {
 
     case "$manager" in
         apt) echo "sudo apt update && sudo apt install -y $packages" ;;
-        dnf) echo "sudo dnf install -y $packages" ;;
+        dnf) echo "sudo dnf --setopt=fastestmirror=True --setopt=max_parallel_downloads=${SETUP_DNF_MAX_PARALLEL_DOWNLOADS:-10} install -y $packages" ;;
         yum) echo "sudo yum install -y $packages" ;;
         *) echo "install package(s): $packages with your system package manager" ;;
     esac
+}
+
+dnf_install_options() {
+    if [ "${SETUP_DNF_FASTESTMIRROR:-1}" != "0" ]; then
+        printf '%s\n' "--setopt=fastestmirror=True"
+    fi
+
+    if [ -n "${SETUP_DNF_MAX_PARALLEL_DOWNLOADS:-10}" ]; then
+        printf '%s\n' "--setopt=max_parallel_downloads=${SETUP_DNF_MAX_PARALLEL_DOWNLOADS:-10}"
+    fi
+}
+
+prepare_dnf_mirrors() {
+    local dnf_options=()
+
+    if [ "${SETUP_DNF_PREPARE_FAST_MIRRORS:-1}" = "0" ]; then
+        return 0
+    fi
+
+    if [ "$DNF_MIRROR_PREPARED" = true ]; then
+        return 0
+    fi
+
+    mapfile -t dnf_options < <(dnf_install_options)
+
+    print_status "Refreshing DNF metadata with fastest mirror selection..."
+    if ! sudo dnf "${dnf_options[@]}" makecache --refresh; then
+        print_warning "DNF mirror preparation failed; continuing with the normal DNF cache."
+    fi
+
+    DNF_MIRROR_PREPARED=true
+}
+
+dnf_install_packages() {
+    local dnf_options=()
+
+    prepare_dnf_mirrors
+    mapfile -t dnf_options < <(dnf_install_options)
+
+    print_status "Installing DNF packages: $*"
+    if ! sudo dnf "${dnf_options[@]}" install -y "$@"; then
+        print_warning "DNF optimized install failed; retrying without fastest mirror options."
+        sudo dnf install -y "$@"
+    fi
+}
+
+dnf_groupinstall() {
+    local group_name="$1"
+    local dnf_options=()
+
+    prepare_dnf_mirrors
+    mapfile -t dnf_options < <(dnf_install_options)
+
+    print_status "Installing DNF group: $group_name"
+    if ! sudo dnf "${dnf_options[@]}" groupinstall -y "$group_name"; then
+        print_warning "DNF optimized groupinstall failed; retrying without fastest mirror options."
+        sudo dnf groupinstall -y "$group_name"
+    fi
+}
+
+linux_group_installed() {
+    local group_name="$1"
+    local manager
+    manager="$(linux_package_manager)"
+
+    case "$manager" in
+        dnf)
+            dnf -C -q group list --installed 2>/dev/null | sed 's/^[[:space:]]*//' | grep -Fxq "$group_name"
+            ;;
+        yum)
+            yum -C -q group list installed 2>/dev/null | sed 's/^[[:space:]]*//' | grep -Fxq "$group_name"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+core_development_tools_installed() {
+    has_command gcc &&
+        has_command g++ &&
+        has_command make &&
+        has_command autoconf &&
+        has_command automake &&
+        has_command pkg-config
+}
+
+development_tools_installed() {
+    if linux_group_installed "Development Tools"; then
+        if core_development_tools_installed; then
+            return 0
+        fi
+
+        print_warning "Development Tools group is marked installed, but core build tools are missing."
+        return 1
+    fi
+
+    # Fallback for systems where group metadata is unavailable but the core
+    # toolchain was installed by another route.
+    core_development_tools_installed
 }
 
 install_linux_packages() {
@@ -207,19 +602,55 @@ install_linux_packages() {
     case "$manager" in
         apt)
             local apt_array=()
+            local apt_install_array=()
+            local package
             read -r -a apt_array <<< "$apt_packages"
+            for package in "${apt_array[@]}"; do
+                if [ "$SETUP_SKIP_INSTALLED" = true ] && linux_package_installed "$package"; then
+                    print_status "$package already installed with apt; skipping."
+                    continue
+                fi
+                apt_install_array+=("$package")
+            done
+            if [ "${#apt_install_array[@]}" -eq 0 ]; then
+                return 0
+            fi
             sudo apt update
-            sudo apt install -y "${apt_array[@]}"
+            sudo apt install -y "${apt_install_array[@]}"
             ;;
         dnf)
             local dnf_array=()
+            local dnf_install_array=()
+            local package
             read -r -a dnf_array <<< "$dnf_packages"
-            sudo dnf install -y "${dnf_array[@]}"
+            for package in "${dnf_array[@]}"; do
+                if [ "$SETUP_SKIP_INSTALLED" = true ] && linux_package_installed "$package"; then
+                    print_status "$package already installed with dnf; skipping."
+                    continue
+                fi
+                dnf_install_array+=("$package")
+            done
+            if [ "${#dnf_install_array[@]}" -eq 0 ]; then
+                return 0
+            fi
+            dnf_install_packages "${dnf_install_array[@]}"
             ;;
         yum)
             local yum_array=()
+            local yum_install_array=()
+            local package
             read -r -a yum_array <<< "$yum_packages"
-            sudo yum install -y "${yum_array[@]}"
+            for package in "${yum_array[@]}"; do
+                if [ "$SETUP_SKIP_INSTALLED" = true ] && linux_package_installed "$package"; then
+                    print_status "$package already installed with yum; skipping."
+                    continue
+                fi
+                yum_install_array+=("$package")
+            done
+            if [ "${#yum_install_array[@]}" -eq 0 ]; then
+                return 0
+            fi
+            sudo yum install -y "${yum_install_array[@]}"
             ;;
         *)
             print_warning "No supported Linux package manager found. Install manually: $apt_packages"
@@ -232,18 +663,29 @@ install_linux_development_tools() {
     local manager
     manager="$(linux_package_manager)"
 
+    if [ "${SETUP_SKIP_BASE_PACKAGES:-0}" = "1" ]; then
+        print_warning "Skipping base package installation because SETUP_SKIP_BASE_PACKAGES=1 is set."
+        return 0
+    fi
+
     case "$manager" in
         apt)
             install_linux_packages "build-essential curl file git tmux openssl procps"
             ;;
         dnf)
-            sudo dnf groupinstall -y "Development Tools" || true
+            print_status "Checking Development Tools group and core build tools..."
+            if should_run_install_step "Development Tools group" development_tools_installed; then
+                dnf_groupinstall "Development Tools" || true
+            fi
             install_linux_packages \
                 "build-essential curl file git tmux openssl procps" \
                 "curl file git tmux openssl procps-ng"
             ;;
         yum)
-            sudo yum groupinstall -y "Development Tools" || true
+            print_status "Checking Development Tools group and core build tools..."
+            if should_run_install_step "Development Tools group" development_tools_installed; then
+                sudo yum groupinstall -y "Development Tools" || true
+            fi
             install_linux_packages \
                 "build-essential curl file git tmux openssl procps" \
                 "curl file git tmux openssl procps-ng"
@@ -258,7 +700,11 @@ install_linux_development_tools() {
 install_with_brew_or_warn() {
     local package="$1"
 
-    if command -v brew &> /dev/null; then
+    if has_command brew; then
+        if [ "$SETUP_SKIP_INSTALLED" = true ] && brew_package_installed "$package"; then
+            print_status "$package already installed with Homebrew; skipping."
+            return 0
+        fi
         brew install "$package" || print_warning "Failed to install $package with Homebrew"
     else
         print_warning "Homebrew is not available; skipping $package"
@@ -812,6 +1258,8 @@ setup_agent_configs() {
     print_warning "Set the needed environment variables before first use, for example: CLI_PROXY_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, FIGMA_API_KEY, GREPTILE_API_KEY, CONTEXT7_API_KEY, REF_API_KEY, SONARQUBE_URL, and SONARQUBE_TOKEN."
 }
 
+load_setup_env
+
 # Check for required dependencies
 print_status "Checking for required dependencies..."
 MISSING_DEPS=false
@@ -859,6 +1307,8 @@ if [ "$MISSING_DEPS" = true ]; then
     exit 1
 fi
 
+select_install_mode
+
 # Function to check and install packages based on OS
 install_packages() {
     if [[ "$(uname)" == "Linux" ]]; then
@@ -883,7 +1333,7 @@ print_status "Installing base packages..."
 install_packages
 
 # Install Homebrew if not installed
-if ! command -v brew &> /dev/null; then
+if should_run_install_step "Homebrew" has_command brew; then
     print_status "Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
@@ -904,43 +1354,54 @@ if ! command -v brew &> /dev/null; then
 fi
 
 # Install Oh My Zsh if not installed
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
+if should_run_install_step "Oh My Zsh" has_dir "$HOME/.oh-my-zsh"; then
+    if [ "$SETUP_OVERRIDE_INSTALLED" = true ] && [ -d "$HOME/.oh-my-zsh" ]; then
+        backup_path "$HOME/.oh-my-zsh"
+    fi
     print_status "Installing Oh My Zsh..."
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 fi
 
 # Install Antigen
-print_status "Installing Antigen..."
-curl -L git.io/antigen > "$HOME/.config/zsh/antigen.zsh"
+if should_run_install_step "Antigen" has_file "$HOME/.config/zsh/antigen.zsh"; then
+    print_status "Installing Antigen..."
+    curl -L git.io/antigen > "$HOME/.config/zsh/antigen.zsh"
+fi
 
 # Install Powerlevel10k theme
-print_status "Installing Powerlevel10k theme..."
-git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+POWERLEVEL10K_DIR="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
+if should_run_install_step "Powerlevel10k theme" has_dir "$POWERLEVEL10K_DIR"; then
+    if [ "$SETUP_OVERRIDE_INSTALLED" = true ] && [ -d "$POWERLEVEL10K_DIR" ]; then
+        backup_path "$POWERLEVEL10K_DIR"
+    fi
+    print_status "Installing Powerlevel10k theme..."
+    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$POWERLEVEL10K_DIR"
+fi
 
 # Install core tools with Homebrew
 print_status "Installing core tools..."
-brew install \
+brew_install_packages \
     tmux \
     git
 
 # Install mise directly
 print_status "Installing mise directly..."
-if ! command -v mise &> /dev/null; then
+if should_run_install_step "mise" has_command mise; then
     curl -fsSL https://mise.run | sh
     # Ensure mise is available in the current session's PATH
     export PATH="$HOME/.local/bin:$PATH"
-else
-    print_status "mise is already installed."
 fi
 
 # Install Neovim with multiple fallback methods
 print_status "Installing Neovim..."
 NEOVIM_INSTALLED=false
 
+if should_run_install_step "Neovim" has_command nvim; then
+
 # Method 1: Try with Homebrew
 if ! $NEOVIM_INSTALLED; then
     print_status "Attempting to install Neovim with Homebrew..."
-    brew install neovim
+    brew_install_packages neovim
     if command -v nvim &> /dev/null; then
         NEOVIM_INSTALLED=true
         print_status "Neovim installed successfully with Homebrew!"
@@ -1029,6 +1490,8 @@ if ! $NEOVIM_INSTALLED && [[ "$(uname)" == "Linux" ]]; then
     fi
 fi
 
+fi
+
 # Verify Neovim installation and display version
 if command -v nvim &> /dev/null; then
     NVIM_VERSION=$(nvim --version | head -n 1)
@@ -1084,14 +1547,18 @@ EOF
     fi
 
     # Install runtimes with mise
-    print_status "Installing Node.js with mise..."
-    mise install node@lts
-    mise use --global node@lts
+    if should_run_install_step "Node.js through mise" mise which node; then
+        print_status "Installing Node.js with mise..."
+        mise install node@lts
+        mise use --global node@lts
+    fi
 
     # Explicitly install the specific Go version with mise
-    print_status "Installing Go 1.24.2 with mise..."
-    mise install go@1.24.2
-    mise use --global go@1.24.2
+    if should_run_install_step "Go through mise" mise which go; then
+        print_status "Installing Go 1.24.2 with mise..."
+        mise install go@1.24.2
+        mise use --global go@1.24.2
+    fi
 
     # Install global Node.js tools
     if mise which node &> /dev/null; then
@@ -1099,15 +1566,16 @@ EOF
 
         print_status "Installing global Node.js development tools..."
         if command -v npm &> /dev/null; then
-            npm install -g npm@latest
-            npm install -g yarn
-            npm install -g pnpm
-            npm install -g typescript
-            npm install -g electron
-            npm install -g electron-packager
-            npm install -g expo-cli
-            npm install -g create-react-app
-            npm install -g create-react-native-app
+            npm_install_global_packages \
+                npm@latest \
+                yarn \
+                pnpm \
+                typescript \
+                electron \
+                electron-packager \
+                expo-cli \
+                create-react-app \
+                create-react-native-app
         else
             print_error "npm not found after Node.js installation. Skipping global tools."
         fi
@@ -1163,35 +1631,40 @@ fi
 
 # Install Python tools
 print_status "Installing Python tools..."
-brew install pyenv
-brew install pipx
+brew_install_packages pyenv pipx
 
 # Install Go tools
 print_status "Installing Go tools..."
-brew install go
+brew_install_packages go
 
 # Install required packages for SDKMAN
 print_status "Installing required packages for SDKMAN..."
 if [[ "$(uname)" == "Linux" ]]; then
     install_linux_packages "zip unzip"
 elif [[ "$(uname)" == "Darwin" ]]; then
-    brew install zip unzip
+    brew_install_packages zip unzip
 fi
 
 # Install SDKMAN if not installed
-if [ ! -d "$HOME/.sdkman" ]; then
+if should_run_install_step "SDKMAN" has_dir "$HOME/.sdkman"; then
+    if [ "$SETUP_OVERRIDE_INSTALLED" = true ] && [ -d "$HOME/.sdkman" ]; then
+        backup_path "$HOME/.sdkman"
+    fi
     print_status "Installing SDKMAN..."
     curl -s "https://get.sdkman.io" | bash
 fi
 
 # Install gvm for managing Go versions
 print_status "Installing gvm for managing multiple Go versions..."
-if [ ! -d "$HOME/.gvm" ]; then
+if should_run_install_step "gvm" has_dir "$HOME/.gvm"; then
+    if [ "$SETUP_OVERRIDE_INSTALLED" = true ] && [ -d "$HOME/.gvm" ]; then
+        backup_path "$HOME/.gvm"
+    fi
     # Install gvm dependencies
     if [[ "$(uname)" == "Linux" ]]; then
         install_linux_packages "bison"
     elif [[ "$(uname)" == "Darwin" ]]; then
-        brew install bison
+        brew_install_packages bison
     fi
 
     # Install gvm
@@ -1212,7 +1685,7 @@ fi
 
 # Install Rust
 print_status "Installing Rust..."
-if ! command -v rustc &> /dev/null; then
+if should_run_install_step "Rust" has_command rustc; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 fi
 
@@ -1230,7 +1703,7 @@ if command -v rustup &> /dev/null; then
             "pkgconf-pkg-config openssl-devel sqlite-devel libpq-devel" \
             "pkgconfig openssl-devel sqlite-devel postgresql-devel"
     elif [[ "$(uname)" == "Darwin" ]]; then
-        brew install openssl@3 sqlite postgresql
+        brew_install_packages openssl@3 sqlite postgresql
     fi
 fi
 
@@ -1245,7 +1718,7 @@ if [[ "$(uname)" == "Linux" ]]; then
     # Install Wine for Windows builds (optional)
     install_linux_packages "wine64" "wine" "wine" || true
 elif [[ "$(uname)" == "Darwin" ]]; then
-    brew install wine
+    brew_install_packages wine
 fi
 
 # Install React Native development requirements
@@ -1271,7 +1744,7 @@ if [[ "$(uname)" == "Linux" ]]; then
         echo 'export PATH="$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools"' >> "$HOME/.zprofile"
     fi
 elif [[ "$(uname)" == "Darwin" ]]; then
-    brew install --cask android-studio android-platform-tools adoptopenjdk/openjdk/adoptopenjdk11
+    brew_install_casks android-studio android-platform-tools adoptopenjdk/openjdk/adoptopenjdk11
     if ! grep -q 'export ANDROID_HOME="$HOME/Library/Android/sdk"' "$HOME/.zprofile"; then
         echo 'export ANDROID_HOME="$HOME/Library/Android/sdk"' >> "$HOME/.zprofile"
         echo 'export PATH="$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools"' >> "$HOME/.zprofile"
@@ -1281,18 +1754,18 @@ fi
 # Install React Native CLI
 print_status "Installing React Native CLI..."
 if command -v npm &> /dev/null; then
-    npm install -g react-native-cli
+    npm_install_global_packages react-native-cli
 else
     print_warning "npm not found. Skipping React Native CLI installation."
 fi
 
 # Install Ruby tools
 print_status "Installing Ruby tools..."
-brew install rbenv
+brew_install_packages rbenv
 
 # Install Kubernetes tools
 print_status "Installing Kubernetes tools..."
-brew install \
+brew_install_packages \
     minikube \
     kubectx \
     kubectl \
@@ -1308,7 +1781,10 @@ if [[ "$(uname)" == "Linux" ]]; then
         "clang cmake ninja-build pkgconfig gtk3-devel xz-devel libstdc++-devel"
 
     # For Linux/WSL2, use the recommended approach
-    if [ ! -d "$HOME/development/flutter" ]; then
+    if should_run_install_step "Flutter SDK" has_dir "$HOME/development/flutter"; then
+        if [ "$SETUP_OVERRIDE_INSTALLED" = true ] && [ -d "$HOME/development/flutter" ]; then
+            backup_path "$HOME/development/flutter"
+        fi
         print_status "Downloading Flutter SDK for Linux..."
         mkdir -p "$HOME/development"
         cd "$HOME/development"
@@ -1330,12 +1806,10 @@ if [[ "$(uname)" == "Linux" ]]; then
 
         cd "$HOME"
         print_status "Flutter SDK installed to $HOME/development/flutter"
-    else
-        print_status "Flutter SDK already installed"
     fi
 elif [[ "$(uname)" == "Darwin" ]]; then
     # For macOS, use Homebrew cask
-    brew install --cask flutter
+    brew_install_casks flutter
 fi
 
 # Install database development tools
@@ -1344,21 +1818,27 @@ if [[ "$(uname)" == "Linux" ]]; then
     LINUX_PM="$(linux_package_manager)"
 
     # PostgreSQL
-    print_status "Installing PostgreSQL..."
-    install_linux_packages \
-        "postgresql postgresql-contrib" \
-        "postgresql-server postgresql-contrib" \
-        "postgresql-server postgresql-contrib"
+    if should_run_install_step "PostgreSQL" has_command psql; then
+        print_status "Installing PostgreSQL..."
+        install_linux_packages \
+            "postgresql postgresql-contrib" \
+            "postgresql-server postgresql-contrib" \
+            "postgresql-server postgresql-contrib"
+    fi
 
     # MySQL
-    print_status "Installing MySQL..."
-    install_linux_packages "mysql-server"
+    if should_run_install_step "MySQL" has_command mysql; then
+        print_status "Installing MySQL..."
+        install_linux_packages "mysql-server"
+    fi
 
     # Redis
-    print_status "Installing Redis..."
-    install_linux_packages "redis-server" "redis" "redis"
+    if should_run_install_step "Redis" has_command redis-server; then
+        print_status "Installing Redis..."
+        install_linux_packages "redis-server" "redis" "redis"
+    fi
 
-    if [ "$LINUX_PM" = "apt" ]; then
+    if [ "$LINUX_PM" = "apt" ] && should_run_install_step "MongoDB" has_command mongod; then
         # MongoDB installation for Ubuntu (completely rewritten to fix repository issues)
         print_status "Setting up MongoDB..."
 
@@ -1437,7 +1917,7 @@ if [[ "$(uname)" == "Linux" ]]; then
         print_warning "  MongoDB: sudo service mongod start"
     fi
 elif [[ "$(uname)" == "Darwin" ]]; then
-    brew install postgresql mysql redis mongodb-community
+    brew_install_packages postgresql mysql redis mongodb-community
     brew services start postgresql
     brew services start mysql
     brew services start redis
@@ -1447,16 +1927,13 @@ fi
 # Install database management tools
 print_status "Installing database management tools..."
 if command -v npm &> /dev/null; then
-    npm install -g prisma
-    npm install -g sequelize-cli
-    npm install -g typeorm
+    npm_install_global_packages prisma sequelize-cli typeorm
 fi
 
 # Install Firebase tools
 print_status "Installing Firebase tools and development environment..."
 if command -v npm &> /dev/null; then
-    npm install -g firebase-tools
-    npm install -g @firebase/cli
+    npm_install_global_packages firebase-tools @firebase/cli
 
     # Initialize Firebase
     print_status "Setting up Firebase configuration directory..."
@@ -1467,29 +1944,37 @@ fi
 print_status "Installing AWS CLI and development tools..."
 if [[ "$(uname)" == "Linux" ]]; then
     # Install AWS CLI v2
-    print_status "Installing AWS CLI v2..."
-    cd /tmp
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    unzip -q awscliv2.zip
-    sudo ./aws/install
-    rm -rf aws awscliv2.zip
+    if should_run_install_step "AWS CLI" has_command aws; then
+        print_status "Installing AWS CLI v2..."
+        cd /tmp
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip -q awscliv2.zip
+        sudo ./aws/install
+        rm -rf aws awscliv2.zip
+    fi
 
     # Install AWS SAM CLI
-    print_status "Installing AWS SAM CLI..."
-    # Install prerequisites
-    install_linux_packages "python3-pip"
-    pip3 install aws-sam-cli
+    if should_run_install_step "AWS SAM CLI" has_command sam; then
+        print_status "Installing AWS SAM CLI..."
+        # Install prerequisites
+        install_linux_packages "python3-pip"
+        pip3 install aws-sam-cli
+    fi
 
     # Install AWS CDK
-    print_status "Installing AWS CDK..."
-    if command -v npm &> /dev/null; then
-        npm install -g aws-cdk
+    if should_run_install_step "AWS CDK" has_command cdk; then
+        print_status "Installing AWS CDK..."
+        if command -v npm &> /dev/null; then
+            npm_install_global_packages aws-cdk
+        fi
     fi
 
     # Install AWS Amplify CLI
-    print_status "Installing AWS Amplify CLI..."
-    if command -v npm &> /dev/null; then
-        npm install -g @aws-amplify/cli
+    if should_run_install_step "AWS Amplify CLI" has_command amplify; then
+        print_status "Installing AWS Amplify CLI..."
+        if command -v npm &> /dev/null; then
+            npm_install_global_packages @aws-amplify/cli
+        fi
     fi
 
     # Install additional AWS tools
@@ -1498,13 +1983,11 @@ if [[ "$(uname)" == "Linux" ]]; then
 
 elif [[ "$(uname)" == "Darwin" ]]; then
     # Install AWS tools via Homebrew
-    brew install awscli
-    brew install aws-sam-cli
+    brew_install_packages awscli aws-sam-cli
 
     # Install AWS CDK and Amplify via npm
     if command -v npm &> /dev/null; then
-        npm install -g aws-cdk
-        npm install -g @aws-amplify/cli
+        npm_install_global_packages aws-cdk @aws-amplify/cli
     fi
 
     # Install additional AWS tools
@@ -1516,6 +1999,7 @@ mkdir -p "$HOME/.aws"
 
 # Install Google Cloud SDK
 print_status "Installing Google Cloud SDK..."
+if should_run_install_step "Google Cloud SDK" has_command gcloud; then
 if [[ "$(uname)" == "Linux" ]]; then
     if [ "$(linux_package_manager)" = "apt" ]; then
         # Install dependencies
@@ -1545,7 +2029,10 @@ if [[ "$(uname)" == "Linux" ]]; then
 
 elif [[ "$(uname)" == "Darwin" ]]; then
     # Install Google Cloud SDK via Homebrew
-    brew install --cask google-cloud-sdk
+    brew_install_casks google-cloud-sdk
+fi
+else
+    print_status "Google Cloud SDK already installed; skipping Google Cloud SDK installer."
 fi
 
 # Initialize gcloud directory
@@ -1564,71 +2051,86 @@ fi
 # Install Azure CLI and development tools
 print_status "Installing Azure CLI and development tools..."
 if [[ "$(uname)" == "Linux" ]]; then
-    if [ "$(linux_package_manager)" = "apt" ]; then
-        # Install dependencies
-        install_linux_packages "ca-certificates curl apt-transport-https lsb-release gnupg"
+    if should_run_install_step "Azure CLI" has_command az; then
+        if [ "$(linux_package_manager)" = "apt" ]; then
+            # Install dependencies
+            install_linux_packages "ca-certificates curl apt-transport-https lsb-release gnupg"
 
-        # Download and install the Microsoft signing key
-        print_status "Adding Microsoft repository..."
-        curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
+            # Download and install the Microsoft signing key
+            print_status "Adding Microsoft repository..."
+            curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
 
-        # Add the Azure CLI software repository
-        AZ_REPO=$(lsb_release -cs)
-        if [[ "$AZ_REPO" == "noble" ]]; then
-            # Use jammy repo for noble (24.04) until dedicated repo is available
-            AZ_REPO="jammy"
-        fi
-        echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
+            # Add the Azure CLI software repository
+            AZ_REPO=$(lsb_release -cs)
+            if [[ "$AZ_REPO" == "noble" ]]; then
+                # Use jammy repo for noble (24.04) until dedicated repo is available
+                AZ_REPO="jammy"
+            fi
+            echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
 
-        # Update repository and install Azure CLI
-        sudo apt update
-        sudo apt install -y azure-cli
-
-        # Install Azure Functions Core Tools
-        print_status "Installing Azure Functions Core Tools..."
-        curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
-        sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg
-        sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-$(lsb_release -cs)-prod $(lsb_release -cs) main" > /etc/apt/sources.list.d/dotnetdev.list'
-        sudo apt update
-        sudo apt install -y azure-functions-core-tools-4
-    else
-        print_warning "Azure apt repositories are Debian/Ubuntu-specific; using Homebrew fallback."
-        install_with_brew_or_warn azure-cli
-        if command -v brew &> /dev/null; then
-            brew tap azure/functions || true
-            brew install azure-functions-core-tools@4 || brew install azure-functions-core-tools || print_warning "Failed to install Azure Functions Core Tools with Homebrew"
+            # Update repository and install Azure CLI
+            sudo apt update
+            sudo apt install -y azure-cli
         else
-            print_warning "Homebrew is not available; skipping Azure Functions Core Tools"
+            print_warning "Azure apt repositories are Debian/Ubuntu-specific; using Homebrew fallback."
+            install_with_brew_or_warn azure-cli
+        fi
+    fi
+
+    if should_run_install_step "Azure Functions Core Tools" has_command func; then
+        if [ "$(linux_package_manager)" = "apt" ]; then
+            # Install Azure Functions Core Tools
+            print_status "Installing Azure Functions Core Tools..."
+            curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+            sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg
+            sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-$(lsb_release -cs)-prod $(lsb_release -cs) main" > /etc/apt/sources.list.d/dotnetdev.list'
+            sudo apt update
+            sudo apt install -y azure-functions-core-tools-4
+        else
+            if command -v brew &> /dev/null; then
+                brew tap azure/functions || true
+                brew_install_packages azure-functions-core-tools@4 || brew_install_packages azure-functions-core-tools || print_warning "Failed to install Azure Functions Core Tools with Homebrew"
+            else
+                print_warning "Homebrew is not available; skipping Azure Functions Core Tools"
+            fi
         fi
     fi
 
     # Install Azure Dev CLI
-    print_status "Installing Azure Dev CLI..."
-    if [ "$(linux_package_manager)" = "apt" ]; then
-        curl -fsSL https://aka.ms/install-azd.sh | bash
-    else
-        install_with_brew_or_warn azure/azd/azd
+    if should_run_install_step "Azure Dev CLI" has_command azd; then
+        print_status "Installing Azure Dev CLI..."
+        if [ "$(linux_package_manager)" = "apt" ]; then
+            curl -fsSL https://aka.ms/install-azd.sh | bash
+        else
+            install_with_brew_or_warn azure/azd/azd
+        fi
     fi
 
     # Install Azure Static Web Apps CLI
     if command -v npm &> /dev/null; then
-        npm install -g @azure/static-web-apps-cli
+        npm_install_global_packages @azure/static-web-apps-cli
     fi
 
 elif [[ "$(uname)" == "Darwin" ]]; then
     # Install Azure CLI via Homebrew
-    brew install azure-cli
+    if should_run_install_step "Azure CLI" has_command az; then
+        brew_install_packages azure-cli
+    fi
 
     # Install Azure Functions Core Tools
-    brew tap azure/functions
-    brew install azure-functions-core-tools@4
+    if should_run_install_step "Azure Functions Core Tools" has_command func; then
+        brew tap azure/functions
+        brew_install_packages azure-functions-core-tools@4
+    fi
 
     # Install Azure Dev CLI
-    brew install azure/azd/azd
+    if should_run_install_step "Azure Dev CLI" has_command azd; then
+        brew_install_packages azure/azd/azd
+    fi
 
     # Install Azure Static Web Apps CLI
     if command -v npm &> /dev/null; then
-        npm install -g @azure/static-web-apps-cli
+        npm_install_global_packages @azure/static-web-apps-cli
     fi
 fi
 
@@ -1636,8 +2138,9 @@ fi
 mkdir -p "$HOME/.azure"
 
 # Create aliases for cloud development
-print_status "Creating cloud development aliases..."
-cat > "$HOME/.config/zsh/cloud_aliases.zsh" << EOF
+if should_run_install_step "cloud development aliases" has_file "$HOME/.config/zsh/cloud_aliases.zsh"; then
+    print_status "Creating cloud development aliases..."
+    cat > "$HOME/.config/zsh/cloud_aliases.zsh" << EOF
 # Firebase aliases
 alias fb='firebase'
 alias fbdeploy='firebase deploy'
@@ -1666,6 +2169,7 @@ alias azgroup='az group'
 alias azfunc='func'
 alias azdeploy='az deployment'
 EOF
+fi
 
 # Add cloud aliases to zshrc if not already included
 if [ -f "$HOME/.zshrc" ]; then
@@ -1685,7 +2189,9 @@ print_status "Performing final setup..."
 
 # Copy our zshrc if it exists in the same directory
 if [ -f "./zshrc" ]; then
-    cp ./zshrc "$HOME/.zshrc"
+    if should_run_install_step "zshrc" has_file "$HOME/.zshrc"; then
+        cp ./zshrc "$HOME/.zshrc"
+    fi
 fi
 
 # WSL2-specific optimizations

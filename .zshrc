@@ -78,6 +78,12 @@ fi
 [ "$TERM" = "xterm-kitty" ] && alias ssh="kitty +kitten ssh"
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=250'
 
+# Decode terminal bracketed-paste sequences instead of inserting ^[[200~.
+if [[ -o interactive ]]; then
+    autoload -Uz bracketed-paste-magic
+    zle -N bracketed-paste bracketed-paste-magic
+fi
+
 # # WSL-specific settings
 # if [[ "$IS_WSL" == true ]]; then
 #     ZSH_TMUX_ITERM2=false

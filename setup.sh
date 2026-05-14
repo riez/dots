@@ -838,7 +838,8 @@ setup_cliproxyapi() {
     local cliproxyapi_home="${CLIPROXYAPI_HOME:-$HOME/Code/github/router-for-me/CLIProxyAPI}"
     local cliproxyapi_state_dir="${CLIPROXYAPI_STATE_DIR:-$HOME/.cli-proxy-api}"
     local cliproxyapi_config_path="${CLIPROXYAPI_CONFIG_PATH:-$cliproxyapi_state_dir/config.yaml}"
-    local cliproxyapi_binary="${CLIPROXYAPI_BINARY:-$cliproxyapi_home/.local/cliproxyapi}"
+    local cliproxyapi_binary="${CLIPROXYAPI_BINARY:-}"
+    local cliproxyapi_work_dir="${CLIPROXYAPI_WORK_DIR:-}"
     local cliproxyapi_port="${CLIPROXYAPI_PORT:-8317}"
     local cliproxyapi_base_url="http://127.0.0.1:${cliproxyapi_port}"
     local cliproxyapi_key="${CLI_PROXY_API_KEY:-}"
@@ -920,6 +921,16 @@ EOF
     print_warning "Add upstream provider credentials locally through CLIProxyAPI OAuth/login commands, the management UI, or $cliproxyapi_config_path."
     print_warning "Do not commit $cliproxyapi_config_path, auth files, certificates, or logs."
 
+    if [ -z "$cliproxyapi_binary" ]; then
+        if has_command cliproxyapi; then
+            cliproxyapi_binary="$(command -v cliproxyapi)"
+        elif has_command brew && brew_package_installed cliproxyapi; then
+            cliproxyapi_binary="$(brew --prefix cliproxyapi 2>/dev/null)/bin/cliproxyapi"
+        else
+            cliproxyapi_binary="$cliproxyapi_home/.local/cliproxyapi"
+        fi
+    fi
+
     if [ ! -x "$cliproxyapi_binary" ]; then
         if [ -d "$cliproxyapi_home" ] && command -v go &> /dev/null; then
             print_status "Building CLIProxyAPI binary..."
@@ -927,6 +938,19 @@ EOF
             (cd "$cliproxyapi_home" && go build -o "$cliproxyapi_binary" ./cmd/server)
         else
             print_warning "CLIProxyAPI binary not found at $cliproxyapi_binary. Set CLIPROXYAPI_HOME or CLIPROXYAPI_BINARY, then rerun setup."
+        fi
+    fi
+
+    if [ ! -x "$cliproxyapi_binary" ]; then
+        print_warning "Skipping CLIProxyAPI service setup because no executable binary is available."
+        return 0
+    fi
+
+    if [ -z "$cliproxyapi_work_dir" ]; then
+        if [ -d "$cliproxyapi_home" ] && [[ "$cliproxyapi_binary" == "$cliproxyapi_home"* ]]; then
+            cliproxyapi_work_dir="$cliproxyapi_home"
+        else
+            cliproxyapi_work_dir="$cliproxyapi_state_dir"
         fi
     fi
 
@@ -949,7 +973,7 @@ EOF
     <string>$cliproxyapi_config_path</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>$cliproxyapi_home</string>
+  <string>$cliproxyapi_work_dir</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -962,11 +986,9 @@ EOF
 </plist>
 EOF
 
-        if [ -x "$cliproxyapi_binary" ]; then
-            launchctl bootout "gui/$(id -u)" "$launch_agent_path" &> /dev/null || true
-            launchctl bootstrap "gui/$(id -u)" "$launch_agent_path" &> /dev/null || \
-                print_warning "Could not load launchd service. Load manually with: launchctl bootstrap gui/\$(id -u) $launch_agent_path"
-        fi
+        launchctl bootout "gui/$(id -u)" "$launch_agent_path" &> /dev/null || true
+        launchctl bootstrap "gui/$(id -u)" "$launch_agent_path" &> /dev/null || \
+            print_warning "Could not load launchd service. Load manually with: launchctl bootstrap gui/\$(id -u) $launch_agent_path"
     elif command -v systemctl &> /dev/null; then
         local systemd_user_dir="$HOME/.config/systemd/user"
         local service_path="$systemd_user_dir/cliproxyapi-local.service"
@@ -979,7 +1001,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=$cliproxyapi_home
+WorkingDirectory=$cliproxyapi_work_dir
 ExecStart=$cliproxyapi_binary -config $cliproxyapi_config_path
 Restart=always
 RestartSec=5
@@ -988,11 +1010,9 @@ RestartSec=5
 WantedBy=default.target
 EOF
 
-        if [ -x "$cliproxyapi_binary" ]; then
-            systemctl --user daemon-reload || true
-            systemctl --user enable --now cliproxyapi-local.service || \
-                print_warning "Could not enable user service. Start manually with: systemctl --user start cliproxyapi-local.service"
-        fi
+        systemctl --user daemon-reload || true
+        systemctl --user enable --now cliproxyapi-local.service || \
+            print_warning "Could not enable user service. Start manually with: systemctl --user start cliproxyapi-local.service"
     fi
 }
 

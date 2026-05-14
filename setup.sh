@@ -1499,6 +1499,16 @@ def cli_proxy_custom_models():
             "noImageSupport": False,
             "provider": "openai",
         },
+        {
+            "model": "gpt-image-2",
+            "id": "custom:GPT-Image-2-8",
+            "index": 8,
+            "baseUrl": openai_base_url,
+            "displayName": "GPT Image 2",
+            "apiKey": api_key,
+            "noImageSupport": False,
+            "provider": "openai",
+        },
     ]
 
 def merge_custom_models(data):

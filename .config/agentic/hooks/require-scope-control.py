@@ -74,13 +74,15 @@ SCOPE_PATTERNS = [
 USER_APPROVAL_PATTERNS = [
     r"\b(approve|approved|allow|allowed|yes|ok|okay|go ahead|proceed)\b.{0,120}\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b",
     r"\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b.{0,120}\b(approve|approved|allowed|ok|okay|go ahead|proceed)\b",
-    r"\b(add|implement|create|preserve|keep|support|maintain|use)\b.{0,120}\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b",
-    r"\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b.{0,120}\b(add|implement|create|preserve|keep|support|maintain|use)\b",
+    r"\b(implement|create|preserve|keep|support|maintain|use)\b.{0,80}\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b",
+    r"\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b.{0,80}\b(implement|create|preserve|keep|support|maintain|use)\b",
 ]
 
 USER_REJECTION_PATTERNS = [
     r"\b(no|without|avoid|do not|don't|dont|never)\b.{0,80}\b(fallback|legacy|compatibility|adapter|shim|workaround|alternate path)\b",
     r"\b(fallback|legacy|compatibility|adapter|shim|workaround|alternate path)\b.{0,80}\b(no|not allowed|forbidden|avoid|never)\b",
+    r"\b(guard|guarding|block|blocking|prevent|preventing|stop|stopping|forbid|forbidding|disallow|disallowing)\b.{0,120}\b(fallback|legacy|compatibility|adapter|shim|workaround|alternate path)\b",
+    r"\b(fallback|legacy|compatibility|adapter|shim|workaround|alternate path)\b.{0,120}\b(guard|guarding|block|blocking|prevent|preventing|stop|stopping|forbid|forbidding|disallow|disallowing)\b",
 ]
 
 
@@ -133,6 +135,14 @@ def patch_targets_code(patch_text: str) -> bool:
         return True
 
     return any(is_code_file(path) for path in paths)
+
+
+def added_lines_from_patch(patch_text: str) -> str:
+    lines = []
+    for line in patch_text.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            lines.append(line[1:])
+    return "\n".join(lines)
 
 
 def find_scope_term(text: str) -> str:
@@ -243,7 +253,7 @@ def main() -> None:
         print(json.dumps({}))
         return
 
-    edit_text = proposed_edit_text(tool_input)
+    edit_text = added_lines_from_patch(patch_text) if patch_text else proposed_edit_text(tool_input)
     matched_term = find_scope_term(edit_text)
     if not matched_term:
         print(json.dumps({}))

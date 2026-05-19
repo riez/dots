@@ -38,6 +38,44 @@ has_file() {
     [ -f "$1" ]
 }
 
+resolve_pencil_mcp_binary() {
+    local override="${PENCIL_MCP_BINARY:-}"
+    local linux_binary="$HOME/.local/opt/pencil/mcp-server-linux-x64"
+    local appimage="$HOME/.local/opt/pencil/Pencil.AppImage"
+    local appimage_binary="squashfs-root/resources/app.asar.unpacked/out/mcp-server-linux-x64"
+    local darwin_binary="/Applications/Pencil.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64"
+
+    if [ -n "$override" ] && [ -x "$override" ]; then
+        printf '%s\n' "$override"
+        return 0
+    fi
+
+    if [ -x "$linux_binary" ]; then
+        printf '%s\n' "$linux_binary"
+        return 0
+    fi
+
+    if [ -x "$appimage" ]; then
+        (
+            cd "$(dirname "$appimage")" &&
+                "$appimage" --appimage-extract 'resources/app.asar.unpacked/out/mcp-server-linux-x64' >/dev/null 2>&1 &&
+                install -m 0755 "$appimage_binary" "$linux_binary"
+        ) || true
+
+        if [ -x "$linux_binary" ]; then
+            printf '%s\n' "$linux_binary"
+            return 0
+        fi
+    fi
+
+    if [ -x "$darwin_binary" ]; then
+        printf '%s\n' "$darwin_binary"
+        return 0
+    fi
+
+    return 1
+}
+
 brew_package_installed() {
     local package="$1"
 
@@ -1059,12 +1097,18 @@ configure_claude_code_settings() {
         return 0
     fi
 
-    CLAUDE_SETTINGS_PATH="$HOME/.claude/settings.json" python3 <<'PY'
+    CLAUDE_SETTINGS_PATH="$HOME/.claude/settings.json" \
+    CLAUDE_MCP_PATH="$HOME/.claude.json" \
+    PENCIL_MCP_BINARY="$(resolve_pencil_mcp_binary || true)" \
+    python3 <<'PY'
 import json
 import os
 from pathlib import Path
 
 settings_path = Path(os.environ["CLAUDE_SETTINGS_PATH"])
+mcp_path = Path(os.environ["CLAUDE_MCP_PATH"])
+pencil_binary = os.environ.get("PENCIL_MCP_BINARY", "")
+
 try:
     data = json.loads(settings_path.read_text()) if settings_path.exists() else {}
 except Exception:
@@ -1138,6 +1182,30 @@ data.setdefault("statusLine", {
 })
 
 settings_path.write_text(json.dumps(data, indent=2) + "\n")
+
+if pencil_binary and Path(pencil_binary).exists():
+    try:
+        mcp_data = json.loads(mcp_path.read_text()) if mcp_path.exists() else {}
+    except Exception:
+        backup = mcp_path.with_suffix(mcp_path.suffix + ".invalid")
+        mcp_path.rename(backup)
+        mcp_data = {}
+
+    if not isinstance(mcp_data, dict):
+        mcp_data = {}
+
+    mcp_servers = mcp_data.setdefault("mcpServers", {})
+    mcp_servers["pencil"] = {
+        "command": pencil_binary,
+        "args": ["--app", "desktop"],
+        "env": {},
+        "type": "stdio",
+    }
+    mcp_path.write_text(json.dumps(mcp_data, indent=2) + "\n")
+    try:
+        mcp_path.chmod(0o600)
+    except OSError:
+        pass
 PY
 }
 
@@ -1152,6 +1220,7 @@ setup_codex_agents() {
     link_directory_children "$agentic_home/skills" "$HOME/.codex/skills"
 
     configure_codex_hooks
+    configure_codex_mcp
 }
 
 configure_codex_hooks() {
@@ -1210,6 +1279,52 @@ hooks_path.write_text(json.dumps(data, indent=2) + "\n")
 PY
 }
 
+configure_codex_mcp() {
+    local pencil_binary
+    pencil_binary="$(resolve_pencil_mcp_binary || true)"
+
+    if [ -z "$pencil_binary" ]; then
+        return 0
+    fi
+
+    mkdir -p "$HOME/.codex"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        print_warning "python3 is required to configure Codex MCP settings; pencil MCP was not updated."
+        return 0
+    fi
+
+    CODEX_CONFIG_PATH="$HOME/.codex/config.toml" \
+    PENCIL_MCP_BINARY="$pencil_binary" \
+    python3 <<'PY'
+import os
+import re
+from pathlib import Path
+
+config_path = Path(os.environ["CODEX_CONFIG_PATH"])
+pencil_binary = os.environ["PENCIL_MCP_BINARY"]
+
+text = config_path.read_text() if config_path.exists() else ""
+block = (
+    "[mcp_servers.pencil]\n"
+    f'command = "{pencil_binary}"\n'
+    'args = [ "--app", "desktop" ]\n'
+)
+
+pattern = r"(?ms)^\[mcp_servers\.pencil\]\n(?:(?!^\[).)*"
+if re.search(pattern, text):
+    text = re.sub(pattern, block, text, count=1).rstrip() + "\n"
+else:
+    text = text.rstrip() + "\n\n" + block if text.strip() else block
+
+config_path.write_text(text)
+try:
+    config_path.chmod(0o600)
+except OSError:
+    pass
+PY
+}
+
 setup_droid_agents() {
     local agentic_home="$HOME/.config/agentic"
 
@@ -1265,6 +1380,7 @@ configure_droid_settings() {
     DROID_SETTINGS_PATH="$HOME/.factory/settings.json" \
     DROID_MCP_PATH="$HOME/.factory/mcp.json" \
     DROID_HOME="$HOME" \
+    PENCIL_MCP_BINARY="$(resolve_pencil_mcp_binary || true)" \
     python3 <<'PY'
 import json
 import os
@@ -1456,8 +1572,8 @@ def merge_mcp_servers(data):
             "args": ["-m", "gpt-5.5", "-c", "model_reasoning_effort=high", "mcp-server"],
         }
 
-    pencil_binary = "/Applications/Pencil.app/Contents/Resources/app.asar.unpacked/out/mcp-server-darwin-arm64"
-    if Path(pencil_binary).exists():
+    pencil_binary = env("PENCIL_MCP_BINARY")
+    if pencil_binary and Path(pencil_binary).exists():
         desired["pencil"] = {
             "type": "stdio",
             "command": pencil_binary,
@@ -1705,6 +1821,7 @@ setup_opencode_local_config() {
     OPENCODE_SAMPLE_CONFIG="$sample_config" \
     OPENCODE_LOCAL_CONFIG="$local_config" \
     OPENCODE_HOME="$HOME" \
+    PENCIL_MCP_BINARY="$(resolve_pencil_mcp_binary || true)" \
     python3 <<'PY'
 import json
 import os
@@ -1749,6 +1866,14 @@ if "pal" in mcp:
         part.replace("__HOME__", home) if isinstance(part, str) else part
         for part in command
     ]
+
+pencil_binary = os.environ.get("PENCIL_MCP_BINARY", "")
+if "pencil" in mcp:
+    if pencil_binary and Path(pencil_binary).exists():
+        mcp["pencil"]["command"] = [pencil_binary, "--app", "desktop"]
+        mcp["pencil"]["enabled"] = True
+    else:
+        mcp["pencil"]["enabled"] = False
 
 target.parent.mkdir(parents=True, exist_ok=True)
 target.write_text(json.dumps(data, indent=2) + "\n")

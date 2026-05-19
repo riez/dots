@@ -37,13 +37,15 @@ const SCOPE_PATTERNS = [
 const APPROVAL_PATTERNS = [
   /\b(approve|approved|allow|allowed|yes|ok|okay|go ahead|proceed)\b.{0,120}\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b/i,
   /\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b.{0,120}\b(approve|approved|allowed|ok|okay|go ahead|proceed)\b/i,
-  /\b(add|implement|create|preserve|keep|support|maintain|use)\b.{0,120}\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b/i,
-  /\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b.{0,120}\b(add|implement|create|preserve|keep|support|maintain|use)\b/i,
+  /\b(implement|create|preserve|keep|support|maintain|use)\b.{0,80}\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b/i,
+  /\b(fallback|legacy|compatibility|compatible|adapter|shim|workaround|alternate path)\b.{0,80}\b(implement|create|preserve|keep|support|maintain|use)\b/i,
 ];
 
 const REJECTION_PATTERNS = [
   /\b(no|without|avoid|do not|don't|dont|never)\b.{0,80}\b(fallback|legacy|compatibility|adapter|shim|workaround|alternate path)\b/i,
   /\b(fallback|legacy|compatibility|adapter|shim|workaround|alternate path)\b.{0,80}\b(no|not allowed|forbidden|avoid|never)\b/i,
+  /\b(guard|guarding|block|blocking|prevent|preventing|stop|stopping|forbid|forbidding|disallow|disallowing)\b.{0,120}\b(fallback|legacy|compatibility|adapter|shim|workaround|alternate path)\b/i,
+  /\b(fallback|legacy|compatibility|adapter|shim|workaround|alternate path)\b.{0,120}\b(guard|guarding|block|blocking|prevent|preventing|stop|stopping|forbid|forbidding|disallow|disallowing)\b/i,
 ];
 
 const approvedSessions = new Set();

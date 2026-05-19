@@ -1022,6 +1022,7 @@ setup_claude_code_agents() {
     print_status "Setting up Claude Code agent links..."
     mkdir -p "$HOME/.claude/agents" "$HOME/.claude/commands" "$HOME/.claude/hooks" "$HOME/.claude/skills"
 
+    link_path "$agentic_home/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
     link_markdown_agents "$agentic_home/droids" "$HOME/.claude/agents"
     link_path "$agentic_home/teams" "$HOME/.claude/teams"
     link_directory_children "$agentic_home/skills" "$HOME/.claude/skills"
@@ -1036,6 +1037,7 @@ setup_claude_code_agents() {
         require-exploration.py \
         require-planning.py \
         require-root-cause.py \
+        require-scope-control.py \
         require-skill.py \
         session-start.py \
         stop.py; do
@@ -1102,6 +1104,7 @@ for command in [
     "~/.claude/hooks/require-exploration.py",
     "~/.claude/hooks/require-planning.py",
     "~/.claude/hooks/require-root-cause.py",
+    "~/.claude/hooks/require-scope-control.py",
     "~/.claude/hooks/require-skill.py",
 ]:
     add_hook("PreToolUse", "Edit|Write|MultiEdit", command, 5000)
@@ -1144,8 +1147,67 @@ setup_codex_agents() {
     print_status "Setting up Codex agent links..."
     mkdir -p "$HOME/.codex/skills"
 
+    link_path "$agentic_home/AGENTS.md" "$HOME/.codex/AGENTS.md"
     link_path "$agentic_home/conventions" "$HOME/.codex/conventions"
     link_directory_children "$agentic_home/skills" "$HOME/.codex/skills"
+
+    configure_codex_hooks
+}
+
+configure_codex_hooks() {
+    print_status "Configuring Codex hooks..."
+    mkdir -p "$HOME/.codex"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        print_warning "python3 is required to configure Codex hooks; AGENTS.md and skills were linked but hooks.json was not updated."
+        return 0
+    fi
+
+    CODEX_HOOKS_PATH="$HOME/.codex/hooks.json" python3 <<'PY'
+import json
+import os
+from pathlib import Path
+
+hooks_path = Path(os.environ["CODEX_HOOKS_PATH"])
+try:
+    data = json.loads(hooks_path.read_text()) if hooks_path.exists() else {}
+except Exception:
+    backup = hooks_path.with_suffix(hooks_path.suffix + ".invalid")
+    hooks_path.rename(backup)
+    data = {}
+
+if not isinstance(data, dict):
+    data = {}
+
+hooks = data.setdefault("hooks", {})
+
+def command_exists(event_name, command):
+    for entry in hooks.get(event_name, []):
+        for hook in entry.get("hooks", []):
+            if hook.get("command") == command:
+                return True
+    return False
+
+def add_hook(event_name, matcher, command, timeout=None):
+    if command_exists(event_name, command):
+        return
+    hook = {"type": "command", "command": command}
+    if timeout is not None:
+        hook["timeout"] = timeout
+    entry = {"hooks": [hook]}
+    if matcher is not None:
+        entry["matcher"] = matcher
+    hooks.setdefault(event_name, []).append(entry)
+
+add_hook(
+    "PreToolUse",
+    "Edit|Write|MultiEdit|edit|write|multi_edit|apply_patch",
+    "python3 ~/.config/agentic/hooks/require-scope-control.py",
+    5000,
+)
+
+hooks_path.write_text(json.dumps(data, indent=2) + "\n")
+PY
 }
 
 setup_droid_agents() {
@@ -1155,6 +1217,7 @@ setup_droid_agents() {
     mkdir -p "$HOME/.factory/commands" "$HOME/.factory/hooks"
 
     link_path "$agentic_home/droids" "$HOME/.factory/droids"
+    link_path "$agentic_home/AGENTS.md" "$HOME/.factory/AGENTS.md"
     link_path "$agentic_home/skills" "$HOME/.factory/skills"
     link_path "$agentic_home/superpowers" "$HOME/.factory/superpowers"
     link_path "$agentic_home/conventions" "$HOME/.factory/conventions"
@@ -1174,6 +1237,7 @@ setup_droid_agents() {
         require-exploration.py \
         require-planning.py \
         require-root-cause.py \
+        require-scope-control.py \
         require-skill.py \
         session-start.py \
         sonarqube-analysis.py \
@@ -1581,6 +1645,7 @@ for command in [
     "sh ~/.factory/hooks/require-exploration.sh",
     "sh ~/.factory/hooks/require-planning.sh",
     "sh ~/.factory/hooks/require-root-cause.sh",
+    "sh ~/.factory/hooks/require-scope-control.sh",
     "sh ~/.factory/hooks/require-skill.sh",
 ]:
     add_hook("PreToolUse", "Write|Edit|MultiEdit", command, 5)
@@ -1702,6 +1767,7 @@ setup_opencode_agents() {
     setup_opencode_local_config "$agentic_home"
 
     link_path "$agentic_home/opencode/bin" "$HOME/.config/opencode/bin"
+    link_path "$agentic_home/AGENTS.md" "$HOME/.config/opencode/AGENTS.md"
     link_path "$agentic_home/opencode/opencode.json" "$HOME/.config/opencode/opencode.json"
     link_path "$agentic_home/opencode/package.json" "$HOME/.config/opencode/package.json"
     link_path "$agentic_home/conventions" "$HOME/.config/opencode/conventions"
@@ -1709,6 +1775,7 @@ setup_opencode_agents() {
     link_path "$agentic_home/superpowers" "$HOME/.config/opencode/superpowers"
 
     link_path "$agentic_home/hooks/coderabbit-review-opencode.js" "$HOME/.config/opencode/plugin/coderabbit-review.js"
+    link_path "$agentic_home/hooks/require-scope-control-opencode.js" "$HOME/.config/opencode/plugin/require-scope-control.js"
     link_path "$agentic_home/hooks/require-skill-opencode.js" "$HOME/.config/opencode/plugin/require-skill.js"
     link_path "$agentic_home/hooks/sonarqube-opencode.js" "$HOME/.config/opencode/plugin/sonarqube-analysis.js"
 

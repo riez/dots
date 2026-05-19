@@ -77,6 +77,7 @@ When reviewing completed work, you will:
      - 04-repetition-and-consistency.md: DRY and consistent
      - 05-documentation-and-tests.md: Documented and tested
    - Use severity taxonomy from `~/.factory/conventions/severity.md` (MUST/SHOULD/COULD)
+   - Apply `~/.factory/conventions/scope-control.md`: flag unapproved fallback functions, legacy compatibility layers, adapter/shim paths, compatibility aliases, silent catch-and-substitute behavior, or duplicate old/new logic
    - Check temporal contamination using `~/.factory/conventions/temporal.md`
    - Review code for adherence to established patterns and conventions
    - Check for proper error handling, type safety, and defensive programming

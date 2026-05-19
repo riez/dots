@@ -4,7 +4,7 @@
 
 - Follow system and tool policies first.
 - Follow user requests next.
-- Follow repo docs such as `CLAUDE.md`, `AGENTS.md`, and `CONTRIBUTING.md`.
+- Follow repo docs such as `AGENTS.md`, `CLAUDE.md`, and `CONTRIBUTING.md`.
 - When instructions conflict, state the conflict and ask which to follow.
 
 ## Orchestrator-First Mode

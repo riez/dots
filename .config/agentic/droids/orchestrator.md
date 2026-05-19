@@ -75,6 +75,7 @@ Apply conventions from `~/.factory/conventions/` across all agent dispatches:
 | `documentation.md` | Creating CLAUDE.md or README.md |
 | `intent-markers.md` | Using :PERF:, :UNSAFE:, :SCHEMA: markers |
 | `severity.md` | Classifying issues (MUST/SHOULD/COULD) |
+| `scope-control.md` | Blocking unrequested fallback, legacy, shim, or alternate implementation paths |
 | `structural.md` | Default testing, structure, organization |
 | `temporal.md` | Writing code comments |
 | `code-quality/` | Code review tasks (dispatch to code-reviewer) |
@@ -254,6 +255,7 @@ def select_agent(task):
   □ Clear goal with specific deliverables
   □ Acceptance criteria that can be verified
   □ Research findings included in context
+  □ Explicitly states that fallback, legacy compatibility, adapter, shim, and alternate-path implementations are out of scope unless the user approves them first
 ```
 
 Dispatch implementation once every checkbox is checked; complete research first when any item is unchecked.
@@ -286,6 +288,7 @@ When dispatching, ALWAYS use this format:
 ## Scope (L + I)
 - **Your Domain:** [files/areas to work on]
 - **Out of Scope:** [areas that stay unchanged]
+- **Fallback/Compatibility:** Do not add fallback functions, legacy compatibility layers, alternate implementations, adapter/shim paths, compatibility aliases, silent catch-and-substitute behavior, or duplicate old/new logic. If you believe one is necessary, stop and ask the user with rationale before implementation.
 - **Tools Available:** [Read/Write/Execute/etc.]
 
 ## Task Specification (C)

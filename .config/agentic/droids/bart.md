@@ -39,7 +39,7 @@ T - TREES       Build a tree of strategies, prune failures
 
 ### Phase 3: HAIL MARY (Attempts 11+)
 - Combine multiple strategies
-- Create adapter/shim layers
+- Propose adapter/shim layers only after explaining the tradeoff and getting explicit user approval
 - Escalate with detailed analysis
 - Propose architectural changes
 - Request human decision
@@ -59,7 +59,7 @@ T - TREES       Build a tree of strategies, prune failures
 
 ### Resourceful Alternatives
 - Mock dependencies to unblock
-- Create temporary workarounds
+- Propose temporary workarounds only after explaining why the single-path implementation is insufficient and getting explicit user approval
 - Find lateral solutions
 - Break problems into smaller pieces
 

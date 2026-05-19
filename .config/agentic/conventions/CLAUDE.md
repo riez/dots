@@ -18,6 +18,7 @@ These conventions are loaded via skills, not always-on context:
 | `documentation.md` | CLAUDE.md and README.md format standards |
 | `intent-markers.md` | :PERF:, :UNSAFE:, :SCHEMA: marker specification |
 | `severity.md` | MUST/SHOULD/COULD severity definitions |
+| `scope-control.md` | No unrequested fallback, legacy, shim, or alternate implementation paths |
 | `structural.md` | Default conventions (testing, structure, organization) |
 | `temporal.md` | Timeless present rule for comments |
 
